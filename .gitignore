@@ -1,0 +1,6 @@
+# Common ignore patterns for shell script projects
+*~
+*.swp
+*.log
+.DS_Store
+.gemini/
