@@ -1,45 +1,91 @@
 # pufsh-tools
-Advanced window tiling and productivity scripts for OpenBSD.
 
-This repository contains a collection of shell scripts designed to enhance the OpenBSD desktop experience, with a focus on advanced window management and "push" logic.
+A collection of advanced productivity scripts and tools for OpenBSD, designed to enhance the desktop experience with a focus on window management, automation, and system integration.
 
-## tiling.sh
-A powerful, state-aware window tiling script that supports generalized grids, progressive expansion, and segment-based sliding.
+## Tools Overview
 
-### Prerequisites
-The script depends on standard X11 utilities and `wmctrl`.
+### Window Tiling (`tiling.sh`)
 
-**Mandatory:**
-- `wmctrl`
-- `xprop`
-- `xwininfo`
+A powerful, state-aware window tiling script that supports generalized grids, progressive expansion, and segment-based sliding. It is designed to work seamlessly with window managers like `cwm`.
+
+**Features:**
+- **Static Tiling**: Place windows in specific grid segments (e.g., left 1/3, middle 4/6).
+- **Progressive Tiling**: "Snap and Grow" windows toward edges.
+- **Slide Tiling**: Move windows by exactly one segment width/height without resizing.
+- **Focus Tracking**: Optional mouse warping to keep focus on the tiled window.
+
+---
+
+### Display Management Suite
+
+A set of scripts to handle monitor hotplugging, "ghost" screen cleanup, and UI reinitialization.
+
+#### `screen-daemon.sh`
+A background daemon intended to be started from your `.xsession`. It monitors screen state and handles UI refresh signals.
+- **Periodic Check**: Every 30 seconds, it checks for "ghost" screens (outputs that are disconnected but still have active geometry) and cleans them up.
+- **Signal Handling**: Responds to `SIGHUP` (manual ghost check) and `SIGUSR1` (UI refresh).
+
+#### `screen-select.sh`
+A manual tool for switching between displays or auto-configuring all connected monitors.
+- **Usage**: `screen-select.sh [auto | <display_name>]`
+- **Integration**: Automatically calls `screen-reinit.sh` after changes.
+
+#### `screen-reinit.sh`
+A helper script that restarts UI components (like `xphoon`, `xbattbar`, and `xscreensaver`) to ensure they correctly adapt to new screen resolutions or layouts.
+
+---
+
+## Installation
+
+### 1. Prerequisites
+Ensure the following tools are installed:
+- `wmctrl`, `xprop`, `xwininfo`, `xrandr`
 - `jot` (standard on OpenBSD)
+- Optional: `xdotool` (for `tiling.sh` focus tracking)
 
-**Optional:**
-- `xdotool` (Required for focus-tracking / mouse warping)
+### 2. Deployment Alternatives
 
-### Installation
-1. Copy the script to your local `bin` directory:
-   ```sh
-   cp tiling.sh ~/bin/
-   ```
-2. Make it executable:
-   ```sh
-   chmod +x ~/bin/tiling.sh
-   ```
+Choose the method that best fits your workflow:
 
-### Usage
-The script supports three main operational modes:
+#### Option A: Manual Copy
+Copy the scripts to a directory in your `PATH` (e.g., `~/bin`):
+```sh
+cp *.sh ~/bin/
+chmod +x ~/bin/*.sh
+```
 
-1. **Static Tiling**: Place windows in specific grid segments.
-   - Example: `tiling.sh -h 3 1` (Left 1/3)
-2. **Progressive Tiling**: "Snap and Grow" windows toward edges.
-   - Example: `tiling.sh -h 3 -r` (Grow right edge to next 1/3; then follow with left edge)
-3. **Slide Tiling**: Move windows by exactly one segment width/height.
-   - Example: `tiling.sh -h 3 -move-r` (Shift window right by 1/3)
+#### Option B: Clone and Link
+Clone the repository and create symbolic links to a location in your `PATH`. This allows you to update the tools easily with `git pull`:
+```sh
+git clone https://github.com/tljm/pufsh-tools.git ~/.local/lib/pufsh-tools
+ln -s ~/.local/lib/pufsh-tools/*.sh ~/bin/
+```
 
-### Integration with cwm
-The `tiling.sh` script is designed to work seamlessly with the `cwm` window manager. Below are suggested keybindings based on a production configuration:
+#### Option C: Add to PATH
+Clone the repository and add it directly to your shell's `PATH` in `~/.profile` or `~/.shrc`:
+```sh
+# Add to ~/.profile
+export PATH="$PATH:$HOME/path/to/pufsh-tools"
+```
+
+---
+
+## Configuration & Integration
+
+### .xsession Setup
+To use the display management suite, add the daemon to your `.xsession` file:
+```sh
+# Start the screen management daemon
+screen-daemon.sh &
+
+# Initial display auto-config (optional)
+screen-select.sh auto
+
+exec cwm
+```
+
+### cwm Integration (`.cwmrc`)
+The `tiling.sh` script is designed to work seamlessly with `cwm`. Below are comprehensive suggested keybindings:
 
 ```cwmrc
 # Progressive Tiling (Grow/Shrink)
@@ -68,4 +114,4 @@ bind-key 4S-i     "tiling.sh -v 12 -move-t"
 ```
 
 ## License
-MIT License
+MIT License - Copyright (c) 2026 tljm

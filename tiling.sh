@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # ==============================================================================
-# Copyright (c) 2026 Tomasz Magdziarz
+# Copyright (c) 2026 tljm
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
