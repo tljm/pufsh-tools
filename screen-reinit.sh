@@ -37,7 +37,8 @@ show_help() {
     cat << EOF
 Usage: $(basename "$0") [options]
 
-Restarts UI components (xphoon, xbattbar, xscreensaver) to adapt to new display settings.
+Restarts UI components (xphoon, xbattbar) and ensures xscreensaver is running
+to adapt to new display settings.
 
 Options:
   -h, --help    Show this help message and exit.
@@ -67,10 +68,10 @@ xphoon -t 10 &
 pkill xbattbar
 xbattbar -a -t 2 -T -O yellow bottom 1>/dev/null 2>&1 &
 
-# 3. Restart xscreensaver
-# Force a clean restart to ensure it detects the new geometry.
-xscreensaver-command -exit 2>/dev/null
-pkill xscreensaver
-xscreensaver --no-splash 1>/dev/null 2>&1 &
+# 3. Ensure xscreensaver is running
+# We only start xscreensaver if it isn't already active.
+if ! pgrep -x xscreensaver >/dev/null; then
+    xscreensaver --no-splash 1>/dev/null 2>&1 &
+fi
 
 echo "UI reinitialization complete."
