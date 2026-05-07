@@ -21,9 +21,12 @@ A powerful, state-aware window tiling script that supports generalized grids, pr
 A set of scripts to handle monitor hotplugging, "ghost" screen cleanup, and UI reinitialization.
 
 #### `screen-daemon.sh`
-A background daemon intended to be started from your `.xsession`. It monitors screen state and handles UI refresh signals.
-- **Periodic Check**: Every 30 seconds, it checks for "ghost" screens (outputs that are disconnected but still have active geometry) and cleans them up.
+A background daemon intended to be started from your `.xsession`. It monitors screen state, handles UI refresh signals, and manages power inhibition.
+- **Usage**: `screen-daemon.sh [-g ghost_seconds] [-i inhibit_seconds]`
+- **Ghost Screen Cleanup**: Checks for outputs that are disconnected but still have active geometry. Default interval: 30 seconds (configurable with `-g`).
+- **xscreensaver Inhibition**: Checks if audio is playing (via `sndio`) and the active window is fullscreen; if so, it inhibits `xscreensaver` blanking. Default interval: 10 seconds (configurable with `-i`).
 - **Signal Handling**: Responds to `SIGHUP` (manual ghost check) and `SIGUSR1` (UI refresh).
+
 
 #### `screen-select.sh`
 A manual tool for switching between displays or auto-configuring all connected monitors.

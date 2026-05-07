@@ -54,6 +54,17 @@ M=1           # Default Margin (gap between windows)
 TOL=5         # Default Tolerance in pixels for edge snapping
 FOCUS_TRACK=1 # Default: Warps mouse to maintain focus (1=on, 0=off)
 
+# --- Initialization ---
+
+# Ensure standard and common local paths are available
+for path in /usr/local/bin /usr/X11R6/bin "$HOME/bin" "$HOME/.local/bin"; do
+    case ":$PATH:" in
+        *":$path:"*) ;;
+        *) [ -d "$path" ] && PATH="$PATH:$path" ;;
+    esac
+done
+export PATH
+
 # --- Dependency Check ---
 # Ensure all REQUIRED external tools are available on the system.
 # xdotool is optional (used for focus tracking if available).

@@ -23,20 +23,27 @@
 # ==============================================================================
 
 # ==============================================================================
-# screen-daemon.sh - Background daemon for screen events (signals/traps)
+# screen-daemon.sh - Background daemon for screen events and power management
 # ==============================================================================
 # 
 # This script is intended to be run from your .xsession file:
 #   screen-daemon.sh &
 #
-# It performs two main functions:
-#   1. Responds to signals:
-#      - SIGHUP (1):  Checks for "ghost" (disconnected but active) screens.
+# It performs three main functions:
+#   1. Signal Handling:
+#      - SIGHUP (1):  Manual check for "ghost" (disconnected but active) screens.
 #      - SIGUSR1 (30): Triggers a UI reinitialization.
-#   2. Periodic Checks:
-#      - Automatically checks for ghost screens every 30 seconds.
+#   2. Ghost Screen Cleanup:
+#      - Automatically checks for and cleans up ghost screens every 30 seconds.
+#   3. xscreensaver Inhibition:
+#      - Prevents screen blanking when audio is playing (via sndio) and the
+#        active window is in Fullscreen mode.
 #
 # ==============================================================================
+
+# --- Defaults ---
+GHOST_PERIOD=30
+INHIBIT_PERIOD=60
 
 # --- Helper Functions ---
 
@@ -44,10 +51,12 @@ show_help() {
     cat << EOF
 Usage: $(basename "$0") [options]
 
-Background daemon for managing screen state and UI reinitialization.
+Background daemon for screen state, UI reinitialization, and power management.
 
 Options:
-  -h, --help    Show this help message and exit.
+  -h            Show this help message and exit.
+  -g seconds    Interval for periodic ghost screen checks (default: $GHOST_PERIOD).
+  -i seconds    Interval for xscreensaver inhibition checks (default: $INHIBIT_PERIOD).
 
 Signals:
   SIGHUP (1)    Trigger a manual 'ghost screen' check.
@@ -59,19 +68,59 @@ EOF
 
 # --- Argument Parsing ---
 
-if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    show_help
-    exit 0
-fi
+while getopts "hg:i:" opt; do
+    case "$opt" in
+        h) show_help; exit 0 ;;
+        g) GHOST_PERIOD=$OPTARG ;;
+        i) INHIBIT_PERIOD=$OPTARG ;;
+        *) show_help; exit 1 ;;
+    esac
+done
 
 # --- Initialization ---
 
+# Ensure standard and common local paths are available
+for path in /usr/local/bin /usr/X11R6/bin "$HOME/bin" "$HOME/.local/bin"; do
+    case ":$PATH:" in
+        *":$path:"*) ;;
+        *) [ -d "$path" ] && PATH="$PATH:$path" ;;
+    esac
+done
+export PATH
+
 # Resolve absolute paths to helper scripts
-SELECT_SCRIPT=$(command -v screen-select.sh)
-REINIT_SCRIPT=$(command -v screen-reinit.sh)
+# Find where this script is located
+SELF_PATH=$(command -v "$0" 2>/dev/null)
+[ -z "$SELF_PATH" ] && SELF_PATH="./$0"
+SCRIPT_DIR=$(dirname "$(realpath "$SELF_PATH" 2>/dev/null || echo "$SELF_PATH")")
+
+find_script() {
+    name=$1
+    if command -v "$name" >/dev/null 2>&1; then
+        command -v "$name"
+    elif [ -f "$SCRIPT_DIR/$name" ]; then
+        echo "$SCRIPT_DIR/$name"
+    fi
+}
+
+SELECT_SCRIPT=$(find_script screen-select.sh)
+REINIT_SCRIPT=$(find_script screen-reinit.sh)
+
+# Dependency Check
+MISSING=""
+for tool in xrandr sndioctl xprop xscreensaver-command; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        MISSING="$MISSING $tool"
+    fi
+done
+
+if [ -n "$MISSING" ]; then
+    echo "Error: Required tools not found in PATH:$MISSING" >&2
+    exit 1
+fi
 
 if [ -z "$SELECT_SCRIPT" ] || [ -z "$REINIT_SCRIPT" ]; then
-    echo "Error: Required helper scripts (screen-select.sh or screen-reinit.sh) not found in PATH."
+    echo "Error: Required helper scripts (screen-select.sh or screen-reinit.sh) not found." >&2
     exit 1
 fi
 
@@ -80,18 +129,36 @@ fi
 # Logic for "smart" reload (triggered by SIGHUP or periodic timer)
 reload_config() {
     SOURCE=${1:-SIGHUP}
-    echo "[$SOURCE] Checking for ghost screens..."
+    [ "$SOURCE" = "SIGHUP" ] && echo "[$SOURCE] Checking for ghost screens..."
     
     # Identify outputs that are disconnected but still have active geometry
     GHOST_SCREENS=$(xrandr | awk '/ disconnected/ && /[0-9]+x[0-9]+/ {print $1}')
 
     if [ -n "$GHOST_SCREENS" ]; then
-        echo "Detected disconnected screen(s): $GHOST_SCREENS"
+        echo "[$SOURCE] Detected disconnected screen(s): $GHOST_SCREENS"
         $SELECT_SCRIPT auto
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
         if [ "$SOURCE" = "SIGHUP" ]; then
-            echo "No ghost screens detected. System state looks clean."
+            echo "[$SOURCE] No ghost screens detected. System state looks clean."
+        fi
+    fi
+}
+
+# Logic for xscreensaver inhibition
+# Deactivates screensaver if audio is playing and active window is fullscreen.
+inhibit_screensaver() {
+    # 1. Check for audio via sndio
+    if sndioctl | grep -q '^app/'; then
+        # 2. Check for active window ID
+        ACTIVE_WIN=$(xprop -root _NET_ACTIVE_WINDOW | awk '{print $5}' | sed 's/,//')
+        
+        if [ -n "$ACTIVE_WIN" ] && [ "$ACTIVE_WIN" != "0x0" ]; then
+            # 3. Check if that window is fullscreen
+            if xprop -id "$ACTIVE_WIN" _NET_WM_STATE | grep -q "FULLSCREEN"; then
+                echo "[INHIBITOR] Audio + Fullscreen detected. Deactivating xscreensaver."
+                xscreensaver-command -deactivate >/dev/null 2>&1
+            fi
         fi
     fi
 }
@@ -107,14 +174,38 @@ refresh_ui() {
 trap 'reload_config SIGHUP' HUP
 trap 'refresh_ui' USR1
 
-echo "Screen daemon started. PID: $$"
-
 # --- Main Loop ---
 
-# Keep the script alive and run periodic checks every 30 seconds.
-# Using background sleep + wait allows the script to remain responsive to signals.
+# Use the smaller of the two intervals as our base "tick"
+TICK=$INHIBIT_PERIOD
+[ "$GHOST_PERIOD" -lt "$TICK" ] && TICK=$GHOST_PERIOD
+
+echo "Screen daemon started. PID: $$ (Tick: ${TICK}s, Inhibit: ${INHIBIT_PERIOD}s, Ghost: ${GHOST_PERIOD}s)"
+
+INHIBIT_TIMER=0
+GHOST_TIMER=0
+
 while true; do
-    sleep 30 &
-    wait $!
-    reload_config "PERIODIC"
+    # Run xscreensaver inhibitor
+    INHIBIT_TIMER=$((INHIBIT_TIMER + TICK))
+    if [ "$INHIBIT_TIMER" -ge "$INHIBIT_PERIOD" ]; then
+        inhibit_screensaver
+        INHIBIT_TIMER=0
+    fi
+
+    # Run periodic ghost screen check
+    GHOST_TIMER=$((GHOST_TIMER + TICK))
+    if [ "$GHOST_TIMER" -ge "$GHOST_PERIOD" ]; then
+        reload_config "PERIODIC"
+        GHOST_TIMER=0
+    fi
+
+    # Sleep for our base tick interval
+    # Use a background sleep and wait so signals can interrupt it.
+    sleep "$TICK" &
+    SLEEP_PID=$!
+    wait $SLEEP_PID
+    # If wait returns (either sleep finished or signal caught),
+    # ensure we don't leave orphaned sleep processes.
+    kill $SLEEP_PID 2>/dev/null
 done

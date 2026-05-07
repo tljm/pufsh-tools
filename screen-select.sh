@@ -120,9 +120,31 @@ else
     fi
 fi
 
+# --- Initialization ---
+
+# Ensure standard and common local paths are available
+for path in /usr/local/bin /usr/X11R6/bin "$HOME/bin" "$HOME/.local/bin"; do
+    case ":$PATH:" in
+        *":$path:"*) ;;
+        *) [ -d "$path" ] && PATH="$PATH:$path" ;;
+    esac
+done
+export PATH
+
+SELF_PATH=$(command -v "$0" 2>/dev/null)
+[ -z "$SELF_PATH" ] && SELF_PATH="./$0"
+SCRIPT_DIR=$(dirname "$(realpath "$SELF_PATH" 2>/dev/null || echo "$SELF_PATH")")
+
 # Reinitialize UI components (wallpaper, bars, etc.)
+REINIT_SCRIPT=""
 if command -v screen-reinit.sh >/dev/null 2>&1; then
-    screen-reinit.sh
+    REINIT_SCRIPT=$(command -v screen-reinit.sh)
+elif [ -f "$SCRIPT_DIR/screen-reinit.sh" ]; then
+    REINIT_SCRIPT="$SCRIPT_DIR/screen-reinit.sh"
+fi
+
+if [ -n "$REINIT_SCRIPT" ]; then
+    "$REINIT_SCRIPT"
 else
-    echo "Warning: screen-reinit.sh not found in PATH. UI refresh skipped."
+    echo "Warning: screen-reinit.sh not found. UI refresh skipped."
 fi

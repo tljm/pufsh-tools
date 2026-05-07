@@ -47,6 +47,17 @@ Note: This script is typically called automatically by screen-select.sh or scree
 EOF
 }
 
+# --- Initialization ---
+
+# Ensure standard and common local paths are available
+for path in /usr/local/bin /usr/X11R6/bin "$HOME/bin" "$HOME/.local/bin"; do
+    case ":$PATH:" in
+        *":$path:"*) ;;
+        *) [ -d "$path" ] && PATH="$PATH:$path" ;;
+    esac
+done
+export PATH
+
 # --- Argument Parsing ---
 
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
