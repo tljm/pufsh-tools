@@ -38,13 +38,35 @@ A helper script that restarts UI components (like `xphoon`, `xbattbar`, and `xsc
 
 ---
 
+### Backup Utility (`make_backup.sh`)
+A versatile backup script that creates timestamped, high-compression archives of the current directory.
+
+**Usage Pattern:**
+This script is designed to be kept in your backup destination folder (e.g., `~/backups/`). When you want to back up a project, you invoke the script from that project's directory. By default, it saves the resulting archive in the same folder where the script itself is located.
+
+```sh
+cd ~/projects/my-cool-project
+~/backups/make_backup.sh -p -t tar.xz
+```
+
+**Features:**
+- **Multiple Formats**: Supports `tar`, `tar.gz`, `tar.bz2`, `tar.xz`, `tar.bz3`, `7z`, and `tar.7z`.
+- **Parallel Compression**: Uses multiple CPU cores for `xz`, `bz3`, and `7z` (and `pigz`/`pbzip2` if available) via the `-p` flag.
+- **Adjustable Compression**: Set levels 1-9 (default 6) via the `-l` flag.
+- **Smart Defaults**: Defaults to the folder where the script resides, making it easy to centralize backups.
+- **Statistics**: Provides original vs. compressed size, space saved, and time taken.
+- **Dry Run**: Preview the exact command that will be executed with the `-n` flag.
+
+---
+
 ## Installation
 
 ### 1. Prerequisites
 Ensure the following tools are installed:
-- `wmctrl`, `xprop`, `xwininfo`, `xrandr`
-- `jot` (standard on OpenBSD)
-- Optional: `xdotool` (for `tiling.sh` focus tracking)
+- `wmctrl`, `xprop`, `xwininfo`, `xrandr`, `realpath`
+- `jot`, `du`, `awk`, `date` (standard on OpenBSD)
+- Archive tools for `make_backup.sh`: `7z`, `xz`, `bzip3`, `gzip`, `bzip2`
+- Optional: `xdotool` (for `tiling.sh` focus tracking), `pigz`, `pbzip2` (for parallel gzip/bzip2)
 
 ### 2. Deployment Alternatives
 
