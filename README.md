@@ -86,6 +86,12 @@ git clone https://github.com/tljm/pufsh-tools.git ~/.local/lib/pufsh-tools
 ln -s ~/.local/lib/pufsh-tools/*.sh ~/bin/
 ```
 
+**Tip for `make_backup.sh`:**
+You can also symlink this script specifically into your dedicated backup folder. It will respect the symlink location and save archives there:
+```sh
+ln -s ~/.local/lib/pufsh-tools/make_backup.sh ~/backups/
+```
+
 #### Option C: Add to PATH
 Clone the repository and add it directly to your shell's `PATH` in `~/.profile` or `~/.shrc`:
 ```sh
