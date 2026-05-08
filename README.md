@@ -1,5 +1,12 @@
 # pufsh-tools
 
+![License](https://img.shields.io/github/license/tljm/pufsh-tools)
+![Platform](https://img.shields.io/badge/platform-OpenBSD-blue)
+![Language](https://img.shields.io/github/languages/top/tljm/pufsh-tools)
+![GitHub last commit](https://img.shields.io/github/last-commit/tljm/pufsh-tools)
+![CWM Optimized](https://img.shields.io/badge/optimized%20for-cwm-brightgreen)
+![AI Generated](https://img.shields.io/badge/AI%20Generated-99%25-blueviolet)
+
 A collection of advanced productivity scripts and tools for OpenBSD, designed to enhance the desktop experience with a focus on window management, automation, and system integration.
 
 ## Tools Overview
