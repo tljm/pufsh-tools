@@ -4,7 +4,6 @@
 ![Platform](https://img.shields.io/badge/platform-OpenBSD-blue)
 ![Language](https://img.shields.io/github/languages/top/tljm/pufsh-tools)
 ![GitHub last commit](https://img.shields.io/github/last-commit/tljm/pufsh-tools)
-![CWM Optimized](https://img.shields.io/badge/optimized%20for-cwm-brightgreen)
 ![AI Generated](https://img.shields.io/badge/AI%20Generated-99%25-blueviolet)
 
 A collection of advanced productivity scripts and tools for OpenBSD, designed to enhance the desktop experience with a focus on window management, automation, and system integration.
@@ -19,7 +18,8 @@ A powerful, state-aware window tiling script that supports generalized grids, pr
 - **Static Tiling**: Place windows in specific grid segments (e.g., left 1/3, middle 4/6).
 - **Progressive Tiling**: "Snap and Grow" windows toward edges.
 - **Slide Tiling**: Move windows by exactly one segment width/height without resizing.
-- **Focus Tracking**: Optional mouse warping to keep focus on the tiled window.
+- **Focus Tracking**: Warps mouse to maintain focus (Default: Enabled).
+- **Smart Defaults**: 1px Margin (gap), 5px Snap Tolerance.
 
 ---
 
@@ -31,7 +31,7 @@ A set of scripts to handle monitor hotplugging, "ghost" screen cleanup, and UI r
 A background daemon intended to be started from your `.xsession`. It monitors screen state, handles UI refresh signals, and manages power inhibition.
 - **Usage**: `screen-daemon.sh [-g ghost_seconds] [-i inhibit_seconds]`
 - **Ghost Screen Cleanup**: Checks for outputs that are disconnected but still have active geometry. Default interval: 30 seconds (configurable with `-g`).
-- **xscreensaver Inhibition**: Checks if audio is playing (via `sndio`) and the active window is fullscreen; if so, it inhibits `xscreensaver` blanking. Default interval: 10 seconds (configurable with `-i`).
+- **xscreensaver Inhibition**: Checks if audio is playing (via `sndio`) and the active window is fullscreen; if so, it inhibits `xscreensaver` blanking. Default interval: 60 seconds (configurable with `-i`).
 - **Signal Handling**: Responds to `SIGHUP` (manual ghost check) and `SIGUSR1` (UI refresh).
 
 
@@ -57,7 +57,7 @@ cd ~/projects/my-cool-project
 ```
 
 **Features:**
-- **Multiple Formats**: Supports `tar`, `tar.gz`, `tar.bz2`, `tar.xz`, `tar.bz3`, `7z`, and `tar.7z`.
+- **Multiple Formats**: Supports `tar`, `tar.gz` (default), `tar.bz2`, `tar.xz`, `tar.bz3`, `7z`, and `tar.7z`.
 - **Parallel Compression**: Uses multiple CPU cores for `xz`, `bz3`, and `7z` (and `pigz`/`pbzip2` if available) via the `-p` flag.
 - **Adjustable Compression**: Set levels 1-9 (default 6) via the `-l` flag.
 - **Smart Defaults**: Defaults to the folder where the script resides, making it easy to centralize backups.
