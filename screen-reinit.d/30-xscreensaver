@@ -3,5 +3,8 @@
 # We only start xscreensaver if it isn't already active.
 
 if ! pgrep -x xscreensaver >/dev/null; then
+    echo "Starting xscreensaver..."
     xscreensaver --no-splash 1>/dev/null 2>&1 &
+else
+    echo "xscreensaver is already running."
 fi
