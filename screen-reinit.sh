@@ -26,8 +26,8 @@
 # screen-reinit.sh - Reinitialize UI components after resolution/output changes
 # ==============================================================================
 #
-# This script restarts various UI components (backgrounds, bars, savers) to
-# ensure they correctly adapt to new screen dimensions or active outputs.
+# This script acts as a framework that executes reinitialization hooks found
+# in the screen-reinit.d directory alongside this script.
 #
 # ==============================================================================
 
@@ -37,7 +37,8 @@ show_help() {
     cat << EOF
 Usage: $(basename "$0") [options]
 
-Restarts UI components (xphoon, xbattbar) and ensures xscreensaver is running
+Executes all reinitialization hooks in the screen-reinit.d directory.
+Hooks are used to restart UI components (like backgrounds, bars, etc.)
 to adapt to new display settings.
 
 Options:
@@ -65,24 +66,29 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     exit 0
 fi
 
-# --- Reinitialization Logic ---
+# --- Framework Logic ---
 
-echo "Refreshing UI components..."
+# Resolve the physical location of this script to find hooks.
+# We use realpath (standard on OpenBSD) to correctly handle symlinks.
+# Note: Pure POSIX alternatives involve using 'cd' and 'ls -l' loops.
+SELF_REAL=$(realpath "$0" 2>/dev/null || echo "$0")
+SCRIPT_DIR=$(dirname "$SELF_REAL")
+HOOKS_DIR="$SCRIPT_DIR/screen-reinit.d"
 
-# 1. Restart xphoon (Background/Wallpaper)
-# xphoon provides a tiled moon background.
-pkill xphoon
-xphoon -t 10 &
-
-# 2. Restart xbattbar (Battery Bar)
-# -a: AC/Battery status, -t: thickness, -T: show on top of windows, -O: color
-pkill xbattbar
-xbattbar -a -t 2 -T -O yellow bottom 1>/dev/null 2>&1 &
-
-# 3. Ensure xscreensaver is running
-# We only start xscreensaver if it isn't already active.
-if ! pgrep -x xscreensaver >/dev/null; then
-    xscreensaver --no-splash 1>/dev/null 2>&1 &
+if [ ! -d "$HOOKS_DIR" ]; then
+    # Exit gracefully if hooks directory is missing
+    exit 0
 fi
+
+echo "Refreshing UI components via hooks in $HOOKS_DIR..."
+
+# Loop through all files in the hooks directory
+for hook in "$HOOKS_DIR"/*; do
+    # Ensure it is a regular file and executable
+    if [ -f "$hook" ] && [ -x "$hook" ]; then
+        echo "[Framework] Executing hook: $(basename "$hook")"
+        "$hook"
+    fi
+done
 
 echo "UI reinitialization complete."

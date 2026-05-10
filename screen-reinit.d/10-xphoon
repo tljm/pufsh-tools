@@ -1,0 +1,6 @@
+#!/bin/sh
+# 10-xphoon: Restart xphoon (Background/Wallpaper)
+# xphoon provides a tiled moon background.
+
+pkill xphoon
+xphoon -t 10 &

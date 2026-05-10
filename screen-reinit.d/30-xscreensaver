@@ -1,0 +1,7 @@
+#!/bin/sh
+# 30-xscreensaver: Ensure xscreensaver is running
+# We only start xscreensaver if it isn't already active.
+
+if ! pgrep -x xscreensaver >/dev/null; then
+    xscreensaver --no-splash 1>/dev/null 2>&1 &
+fi
