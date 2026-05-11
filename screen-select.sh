@@ -102,16 +102,17 @@ else
     if [ "$FOUND" -eq 1 ]; then
         echo "Switching to $MODE..."
         
-        # Build xrandr arguments to turn off all OTHER connected outputs
-        OFF_ARGS=""
-        for out in $CONNECTED_OUTPUTS; do
-            if [ "$out" != "$MODE" ]; then
-                OFF_ARGS="$OFF_ARGS --output $out --off"
-            fi
-        done
-        
-        # Execute xrandr: Enable target as primary, disable the rest
-        xrandr --output "$MODE" --primary --auto $OFF_ARGS
+        # Build xrandr arguments safely using positional parameters
+        # We do this in a subshell to avoid overwriting our own $1, $2, etc.
+        (
+            set -- --output "$MODE" --primary --auto
+            for out in $CONNECTED_OUTPUTS; do
+                if [ "$out" != "$MODE" ]; then
+                    set -- "$@" --output "$out" --off
+                fi
+            done
+            xrandr "$@"
+        )
     else
         echo "Error: Display '$MODE' not found or not connected."
         echo ""

@@ -178,64 +178,22 @@ if [ "$DRY_RUN" -eq 0 ] && [ ! -d "$DEST_DIR" ]; then
 fi
 ABS_DEST=$(cd "$DEST_DIR" 2>/dev/null && pwd || echo "$DEST_DIR")
 
-# Determine extension and command
-V_TAR=""
-V_ZIP=""
-[ "$VERBOSE" -eq 1 ] && V_TAR="v" && V_ZIP="-v"
-
-# Parallel flags
-P_XZ=""
-P_7Z=""
-[ "$PARALLEL" -eq 1 ] && P_XZ="-T0" && P_7Z="-mmt=on"
-
+# Determine extension
 case "$TYPE" in
-    tar)
-        EXT="tar"
-        CMD="tar c${V_TAR}f \"\$ARCHIVE_PATH\" \"\$DIR_NAME\""
-        ;;
-    tar.gz)
-        EXT="tar.gz"
-        CMD="tar c${V_TAR}f - \"\$DIR_NAME\" | $ZIP_TOOL -$LEVEL ${V_ZIP} > \"\$ARCHIVE_PATH\""
-        ;;
-    tar.bz2)
-        EXT="tar.bz2"
-        CMD="tar c${V_TAR}f - \"\$DIR_NAME\" | $ZIP_TOOL -$LEVEL ${V_ZIP} > \"\$ARCHIVE_PATH\""
-        ;;
-    tar.xz)
-        EXT="tar.xz"
-        CMD="tar c${V_TAR}f - \"\$DIR_NAME\" | xz -$LEVEL $P_XZ ${V_ZIP} > \"\$ARCHIVE_PATH\""
-        ;;
-    tar.bz3)
-        EXT="tar.bz3"
-        P_BZ3=""
-        [ "$PARALLEL" -eq 1 ] && P_BZ3="-j 0"
-        # bzip3 uses -b for block size (MiB) instead of -1..-9. 
-        # Mapping: Level 1-9 -> 16, 32, 48, 64, 80, 96, 112, 128, 256 MiB
-        BZ3_BLOCK=$((LEVEL * 16))
-        [ "$LEVEL" -eq 9 ] && BZ3_BLOCK=256
-        CMD="tar c${V_TAR}f - \"\$DIR_NAME\" | bzip3 -c -b $BZ3_BLOCK $P_BZ3 ${V_ZIP} > \"\$ARCHIVE_PATH\""
-        ;;
-    tar.7z)
-        EXT="tar.7z"
-        CMD="tar c${V_TAR}f - \"\$DIR_NAME\" | 7z a -si\"\$SAFE_NAME.tar\" -t7z -m0=lzma -mx=$LEVEL -mfb=64 -md=32m -ms=on $P_7Z \"\$ARCHIVE_PATH\""
-        [ "$VERBOSE" -eq 0 ] && CMD="$CMD > /dev/null"
-        ;;
-    7z)
-        EXT="7z"
-        # 7z specific settings from original script. It is verbose by default.
-        CMD="7z a -t7z -m0=lzma -mx=$LEVEL -mfb=64 -md=32m -ms=on $P_7Z \"\$ARCHIVE_PATH\" \"\$DIR_NAME\""
-        # If not verbose, we could potentially pipe to /dev/null but 7z is useful to see.
-        [ "$VERBOSE" -eq 0 ] && CMD="$CMD > /dev/null"
-        ;;
+    tar)     EXT="tar" ;;
+    tar.gz)  EXT="tar.gz" ;;
+    tar.bz2) EXT="tar.bz2" ;;
+    tar.xz)  EXT="tar.xz" ;;
+    tar.bz3) EXT="tar.bz3" ;;
+    tar.7z)  EXT="tar.7z" ;;
+    7z)      EXT="7z" ;;
 esac
 
 ARCHIVE_PATH="$ABS_DEST/${SAFE_NAME}_${NOW}.${EXT}"
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "Dry run: would create $TYPE backup of: $TARGET_PATH"
-    # Expand the command for display by evaluating an echo of it
-    EXPANDED_CMD=$(eval "echo \"$CMD\"")
-    echo "Command: cd \"$PARENT_DIR\" && $EXPANDED_CMD"
+    echo "Command: cd \"$PARENT_DIR\" && (backup command for $TYPE)"
     exit 0
 fi
 
@@ -253,9 +211,75 @@ fi
 
 START_TIME=$(date +%s)
 
-# Execute the constructed command
-eval "$CMD"
-RET=$?
+# Execute the command directly based on type
+case "$TYPE" in
+    tar)
+        if [ "$VERBOSE" -eq 1 ]; then
+            tar cvf "$ARCHIVE_PATH" "$DIR_NAME"
+        else
+            tar cf "$ARCHIVE_PATH" "$DIR_NAME"
+        fi
+        RET=$?
+        ;;
+    tar.gz)
+        if [ "$VERBOSE" -eq 1 ]; then
+            tar cvf - "$DIR_NAME" | "$ZIP_TOOL" -"$LEVEL" -v > "$ARCHIVE_PATH"
+        else
+            tar cf - "$DIR_NAME" | "$ZIP_TOOL" -"$LEVEL" > "$ARCHIVE_PATH"
+        fi
+        RET=$?
+        ;;
+    tar.bz2)
+        if [ "$VERBOSE" -eq 1 ]; then
+            tar cvf - "$DIR_NAME" | "$ZIP_TOOL" -"$LEVEL" -v > "$ARCHIVE_PATH"
+        else
+            tar cf - "$DIR_NAME" | "$ZIP_TOOL" -"$LEVEL" > "$ARCHIVE_PATH"
+        fi
+        RET=$?
+        ;;
+    tar.xz)
+        P_XZ=""
+        [ "$PARALLEL" -eq 1 ] && P_XZ="-T0"
+        if [ "$VERBOSE" -eq 1 ]; then
+            tar cvf - "$DIR_NAME" | xz -"$LEVEL" $P_XZ -v > "$ARCHIVE_PATH"
+        else
+            tar cf - "$DIR_NAME" | xz -"$LEVEL" $P_XZ > "$ARCHIVE_PATH"
+        fi
+        RET=$?
+        ;;
+    tar.bz3)
+        P_BZ3=""
+        [ "$PARALLEL" -eq 1 ] && P_BZ3="-j 0"
+        BZ3_BLOCK=$((LEVEL * 16))
+        [ "$LEVEL" -eq 9 ] && BZ3_BLOCK=256
+        if [ "$VERBOSE" -eq 1 ]; then
+            tar cvf - "$DIR_NAME" | bzip3 -c -b "$BZ3_BLOCK" $P_BZ3 -v > "$ARCHIVE_PATH"
+        else
+            tar cf - "$DIR_NAME" | bzip3 -c -b "$BZ3_BLOCK" $P_BZ3 > "$ARCHIVE_PATH"
+        fi
+        RET=$?
+        ;;
+    tar.7z)
+        P_7Z=""
+        [ "$PARALLEL" -eq 1 ] && P_7Z="-mmt=on"
+        if [ "$VERBOSE" -eq 1 ]; then
+            tar cvf - "$DIR_NAME" | 7z a -si"$SAFE_NAME.tar" -t7z -m0=lzma -mx="$LEVEL" -mfb=64 -md=32m -ms=on $P_7Z "$ARCHIVE_PATH"
+        else
+            tar cf - "$DIR_NAME" | 7z a -si"$SAFE_NAME.tar" -t7z -m0=lzma -mx="$LEVEL" -mfb=64 -md=32m -ms=on $P_7Z "$ARCHIVE_PATH" > /dev/null
+        fi
+        RET=$?
+        ;;
+    7z)
+        P_7Z=""
+        [ "$PARALLEL" -eq 1 ] && P_7Z="-mmt=on"
+        if [ "$VERBOSE" -eq 1 ]; then
+            7z a -t7z -m0=lzma -mx="$LEVEL" -mfb=64 -md=32m -ms=on $P_7Z "$ARCHIVE_PATH" "$DIR_NAME"
+        else
+            7z a -t7z -m0=lzma -mx="$LEVEL" -mfb=64 -md=32m -ms=on $P_7Z "$ARCHIVE_PATH" "$DIR_NAME" > /dev/null
+        fi
+        RET=$?
+        ;;
+esac
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))

@@ -47,6 +47,14 @@ INHIBIT_PERIOD=60
 
 # --- Helper Functions ---
 
+# Simple numeric check for argument validation.
+is_numeric() {
+    case $1 in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 show_help() {
     cat << EOF
 Usage: $(basename "$0") [options]
@@ -71,8 +79,20 @@ EOF
 while getopts "hg:i:" opt; do
     case "$opt" in
         h) show_help; exit 0 ;;
-        g) GHOST_PERIOD=$OPTARG ;;
-        i) INHIBIT_PERIOD=$OPTARG ;;
+        g) 
+            if is_numeric "$OPTARG"; then
+                GHOST_PERIOD=$OPTARG
+            else
+                echo "Error: -g requires a numeric argument." >&2; exit 1
+            fi
+            ;;
+        i) 
+            if is_numeric "$OPTARG"; then
+                INHIBIT_PERIOD=$OPTARG
+            else
+                echo "Error: -i requires a numeric argument." >&2; exit 1
+            fi
+            ;;
         *) show_help; exit 1 ;;
     esac
 done
