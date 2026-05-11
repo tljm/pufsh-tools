@@ -161,8 +161,10 @@ reload_config() {
     LID_CLOSED=0
     if [ -n "$LID_SENSOR" ] && [ "$(sysctl -n machdep.lidaction 2>/dev/null)" = "0" ]; then
         LID_STATE=$(sysctl -n "$LID_SENSOR" 2>/dev/null)
-        # 'Off' means closed, 'On' means open on most OpenBSD systems
-        [ "$LID_STATE" = "Off" ] && LID_CLOSED=1
+        # Check for 'Off' (closed) in the output
+        case "$LID_STATE" in
+            Off*) LID_CLOSED=1 ;;
+        esac
     fi
 
     # 2. Identify outputs that are disconnected but still have active geometry (Ghost Screens)
@@ -170,8 +172,8 @@ reload_config() {
 
     if [ "$LID_CLOSED" -eq 1 ] && [ -n "$BUILTIN_SCREEN" ]; then
         # If lid is closed, ensure built-in is off and everything else is auto
-        # We check if it's currently active to avoid redundant xrandr calls
-        if xrandr | grep -q "^$BUILTIN_SCREEN connected [0-9]"; then
+        # We check if it has a resolution (+0+0 or similar) to see if it's active
+        if xrandr | grep "^$BUILTIN_SCREEN" | grep -q "[0-9]x[0-9]"; then
             echo "[$SOURCE] Lid is closed. Disabling built-in screen ($BUILTIN_SCREEN)..."
             xrandr --auto --output "$BUILTIN_SCREEN" --off
             $REINIT_SCRIPT
