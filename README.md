@@ -30,9 +30,9 @@ A set of scripts to handle monitor hotplugging, "ghost" screen cleanup, and UI r
 #### `screen-daemon.sh`
 A background daemon intended to be started from your `.xsession`. It monitors screen state, handles UI refresh signals, and manages power inhibition.
 - **Usage**: `screen-daemon.sh [-g ghost_seconds] [-i inhibit_seconds]`
-- **Ghost Screen Cleanup**: Checks for outputs that are disconnected but still have active geometry. Default interval: 30 seconds (configurable with `-g`).
+- **Ghost Screen Cleanup**: Checks for outputs that are disconnected but still have active geometry. Default interval: 10 seconds (configurable with `-g`).
 - **xscreensaver Inhibition**: Checks if audio is playing (via `sndio`) and the active window is fullscreen; if so, it inhibits `xscreensaver` blanking. Default interval: 60 seconds (configurable with `-i`).
-- **Lid Management**: If `machdep.lidaction=0` and the lid is closed, it automatically disables the built-in screen and enables all other connected displays (periodic check every 30s).
+- **Lid Management**: If `machdep.lidaction=0` and the lid is closed, it automatically disables the built-in screen and enables all other connected displays (periodic check every 10s).
 - **Signal Handling**: Responds to `SIGHUP` (manual ghost check) and `SIGUSR1` (UI refresh).
 
 

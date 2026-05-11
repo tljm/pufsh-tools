@@ -42,7 +42,7 @@
 # ==============================================================================
 
 # --- Defaults ---
-GHOST_PERIOD=30
+GHOST_PERIOD=10
 INHIBIT_PERIOD=60
 
 # --- Helper Functions ---
