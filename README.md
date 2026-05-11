@@ -42,8 +42,15 @@ A manual tool for switching between displays or auto-configuring all connected m
 - **Integration**: Automatically calls `screen-reinit.sh` after changes.
 
 #### `screen-reinit.sh`
-A modular framework that executes reinitialization hooks to ensure UI components (like `xphoon`, `xbattbar`, and `xscreensaver`) correctly adapt to new screen resolutions or layouts.
-- **Hook System**: Executes all executable scripts found in the `screen-reinit.d/` directory located alongside the script.
+A modular framework that executes reinitialization hooks to ensure UI components correctly adapt to new screen resolutions or layouts.
+
+- **Hook System**: Executes all executable scripts found in the `screen-reinit.d/` directory.
+- **Customization**: All hooks are optional and intended to be adapted or added to based on your specific desktop needs.
+- **Example Hooks included**:
+    - `10-xphoon`: Manages background/wallpaper.
+    - `20-xbattbar`: Manages battery monitoring bar.
+    - `30-xscreensaver`: Ensures screensaver daemon is active.
+    - `40-console-move`: Automatically moves `xconsole` to the bottom-right corner.
 - **Symlink Support**: Correctly resolves its physical location to find hooks even when invoked via a symlink in `PATH`.
 
 ---
