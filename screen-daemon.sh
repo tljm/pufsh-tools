@@ -126,6 +126,12 @@ find_script() {
 SELECT_SCRIPT=$(find_script screen-select.sh)
 REINIT_SCRIPT=$(find_script screen-reinit.sh)
 
+# Detect built-in display (eDP, LVDS, DSI)
+BUILTIN_SCREEN=$(xrandr | grep -E "^(eDP|LVDS|DSI)" | awk '{print $1}' | head -n 1)
+
+# Detect lid sensor
+LID_SENSOR=$(sysctl hw.sensors 2>/dev/null | grep -i "lid" | cut -d= -f1 | head -n 1)
+
 # Dependency Check
 MISSING=""
 for tool in xrandr sndioctl xprop xscreensaver-command; do
@@ -149,18 +155,38 @@ fi
 # Logic for "smart" reload (triggered by SIGHUP or periodic timer)
 reload_config() {
     SOURCE=${1:-SIGHUP}
-    [ "$SOURCE" = "SIGHUP" ] && echo "[$SOURCE] Checking for ghost screens..."
+    [ "$SOURCE" = "SIGHUP" ] && echo "[$SOURCE] Checking for screen events..."
     
-    # Identify outputs that are disconnected but still have active geometry
+    # 1. Check for Lid State if machdep.lidaction is 0
+    LID_CLOSED=0
+    if [ -n "$LID_SENSOR" ] && [ "$(sysctl -n machdep.lidaction 2>/dev/null)" = "0" ]; then
+        LID_STATE=$(sysctl -n "$LID_SENSOR" 2>/dev/null)
+        # 'Off' means closed, 'On' means open on most OpenBSD systems
+        [ "$LID_STATE" = "Off" ] && LID_CLOSED=1
+    fi
+
+    # 2. Identify outputs that are disconnected but still have active geometry (Ghost Screens)
     GHOST_SCREENS=$(xrandr | awk '/ disconnected/ && /[0-9]+x[0-9]+/ {print $1}')
 
-    if [ -n "$GHOST_SCREENS" ]; then
+    if [ "$LID_CLOSED" -eq 1 ] && [ -n "$BUILTIN_SCREEN" ]; then
+        # If lid is closed, ensure built-in is off and everything else is auto
+        # We check if it's currently active to avoid redundant xrandr calls
+        if xrandr | grep -q "^$BUILTIN_SCREEN connected [0-9]"; then
+            echo "[$SOURCE] Lid is closed. Disabling built-in screen ($BUILTIN_SCREEN)..."
+            xrandr --auto --output "$BUILTIN_SCREEN" --off
+            $REINIT_SCRIPT
+        elif [ -n "$GHOST_SCREENS" ]; then
+            echo "[$SOURCE] Lid is closed and ghost screens detected: $GHOST_SCREENS"
+            xrandr --auto --output "$BUILTIN_SCREEN" --off
+            $REINIT_SCRIPT
+        fi
+    elif [ -n "$GHOST_SCREENS" ]; then
         echo "[$SOURCE] Detected disconnected screen(s): $GHOST_SCREENS"
         $SELECT_SCRIPT auto
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
         if [ "$SOURCE" = "SIGHUP" ]; then
-            echo "[$SOURCE] No ghost screens detected. System state looks clean."
+            echo "[$SOURCE] No screen events detected. System state looks clean."
         fi
     fi
 }
