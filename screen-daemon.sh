@@ -167,18 +167,26 @@ reload_config() {
         esac
     fi
 
-    # 2. Identify outputs that are disconnected but still have active geometry (Ghost Screens)
+    # 2. Identify screen events
+    # Ghost Screens: disconnected but still have active geometry
     GHOST_SCREENS=$(xrandr | awk '/ disconnected/ && /[0-9]+x[0-9]+/ {print $1}')
+    # New Screens: connected but currently inactive (no resolution)
+    # We filter out the builtin screen as it is handled specifically by the lid logic
+    NEW_EXTERNAL=$(xrandr | awk -v builtin="$BUILTIN_SCREEN" \
+        '$1 != builtin && / connected/ && !/[0-9]+x[0-9]+/ {print $1}')
 
     if [ "$LID_CLOSED" -eq 1 ] && [ -n "$BUILTIN_SCREEN" ]; then
-        # If lid is closed, ensure built-in is off and everything else is auto
-        # We check if it has a resolution (+0+0 or similar) to see if it's active
+        # Check if built-in is active
+        BUILTIN_ACTIVE=0
         if xrandr | grep "^$BUILTIN_SCREEN" | grep -q "[0-9]x[0-9]"; then
-            echo "[$SOURCE] Lid is closed. Disabling built-in screen ($BUILTIN_SCREEN)..."
-            xrandr --auto --output "$BUILTIN_SCREEN" --off
-            $REINIT_SCRIPT
-        elif [ -n "$GHOST_SCREENS" ]; then
-            echo "[$SOURCE] Lid is closed and ghost screens detected: $GHOST_SCREENS"
+            BUILTIN_ACTIVE=1
+        fi
+        
+        if [ "$BUILTIN_ACTIVE" -eq 1 ] || [ -n "$GHOST_SCREENS" ] || [ -n "$NEW_EXTERNAL" ]; then
+            [ "$BUILTIN_ACTIVE" -eq 1 ] && echo "[$SOURCE] Lid is closed but built-in screen is still active."
+            [ -n "$NEW_EXTERNAL" ] && echo "[$SOURCE] Lid is closed and new external screen(s) detected: $NEW_EXTERNAL"
+            [ -n "$GHOST_SCREENS" ] && echo "[$SOURCE] Lid is closed and ghost screen(s) detected: $GHOST_SCREENS"
+            
             xrandr --auto --output "$BUILTIN_SCREEN" --off
             $REINIT_SCRIPT
         fi
