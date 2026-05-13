@@ -1,6 +1,26 @@
 #!/bin/sh
 # 10-xphoon: Restart xphoon (Background/Wallpaper)
-# xphoon provides a tiled moon background.
 
-pkill xphoon
+# 1. Termination Phase
+# Loop until pgrep confirms the process is gone.
+while pgrep -x xphoon >/dev/null; do
+    pkill xphoon
+    sleep 1
+done
+
+# 2. Startup Phase
+# Launch the process in the background.
 xphoon -t 10 &
+
+# Loop up to 5 times to verify it started.
+COUNT=0
+while [ $COUNT -lt 5 ]; do
+    if pgrep -x xphoon >/dev/null; then
+        exit 0
+    fi
+    sleep 1
+    COUNT=$((COUNT + 1))
+done
+
+echo "[Framework] Error: xphoon failed to start after 5 attempts."
+exit 1
