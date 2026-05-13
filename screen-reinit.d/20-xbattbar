@@ -10,8 +10,8 @@ done
 
 # 2. Startup Phase
 # Launch the process in the background.
-# -a: AC/Battery status, -t: thickness, -T: show on top of windows, -O: color
-xbattbar -a -t 2 -T -O yellow bottom 1>/dev/null 2>&1 &
+# -a: always on top, -t: thickness, -O: color
+xbattbar -a -t 2 -O yellow bottom 1>/dev/null 2>&1 &
 
 # Loop up to 5 times to verify it started.
 COUNT=0
