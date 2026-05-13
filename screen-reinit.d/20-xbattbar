@@ -1,6 +1,27 @@
 #!/bin/sh
 # 20-xbattbar: Restart xbattbar (Battery Bar)
-# -a: AC/Battery status, -t: thickness, -T: show on top of windows, -O: color
 
-pkill xbattbar
+# 1. Termination Phase
+# Loop until pgrep confirms the process is gone.
+while pgrep -x xbattbar >/dev/null; do
+    pkill xbattbar
+    sleep 1
+done
+
+# 2. Startup Phase
+# Launch the process in the background.
+# -a: AC/Battery status, -t: thickness, -T: show on top of windows, -O: color
 xbattbar -a -t 2 -T -O yellow bottom 1>/dev/null 2>&1 &
+
+# Loop up to 5 times to verify it started.
+COUNT=0
+while [ $COUNT -lt 5 ]; do
+    if pgrep -x xbattbar >/dev/null; then
+        exit 0
+    fi
+    sleep 1
+    COUNT=$((COUNT + 1))
+done
+
+echo "[Framework] Error: xbattbar failed to start after 5 attempts."
+exit 1
