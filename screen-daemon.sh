@@ -170,10 +170,16 @@ reload_config() {
     # 2. Identify screen events
     # Ghost Screens: disconnected but still have active geometry
     GHOST_SCREENS=$(xrandr | awk '/ disconnected/ && /[0-9]+x[0-9]+/ {print $1}')
-    # New Screens: connected but currently inactive (no resolution)
-    # We filter out the builtin screen as it is handled specifically by the lid logic
-    NEW_EXTERNAL=$(xrandr | awk -v builtin="$BUILTIN_SCREEN" \
-        '$1 != builtin && / connected/ && !/[0-9]+x[0-9]+/ {print $1}')
+    
+    # Inactive Screens: connected but currently off (no resolution)
+    # If lid is closed, we ignore the builtin screen here (it's handled specifically)
+    # If lid is open, we include it so it can be auto-enabled
+    if [ "$LID_CLOSED" -eq 1 ]; then
+        INACTIVE_SCREENS=$(xrandr | awk -v builtin="$BUILTIN_SCREEN" \
+            '$1 != builtin && / connected/ && !/[0-9]+x[0-9]+/ {print $1}')
+    else
+        INACTIVE_SCREENS=$(xrandr | awk '/ connected/ && !/[0-9]+x[0-9]+/ {print $1}')
+    fi
 
     if [ "$LID_CLOSED" -eq 1 ] && [ -n "$BUILTIN_SCREEN" ]; then
         # Check if built-in is active
@@ -182,16 +188,20 @@ reload_config() {
             BUILTIN_ACTIVE=1
         fi
         
-        if [ "$BUILTIN_ACTIVE" -eq 1 ] || [ -n "$GHOST_SCREENS" ] || [ -n "$NEW_EXTERNAL" ]; then
+        if [ "$BUILTIN_ACTIVE" -eq 1 ] || [ -n "$GHOST_SCREENS" ] || [ -n "$INACTIVE_SCREENS" ]; then
             [ "$BUILTIN_ACTIVE" -eq 1 ] && echo "[$SOURCE] Lid is closed but built-in screen is still active."
-            [ -n "$NEW_EXTERNAL" ] && echo "[$SOURCE] Lid is closed and new external screen(s) detected: $NEW_EXTERNAL"
+            [ -n "$INACTIVE_SCREENS" ] && echo "[$SOURCE] Lid is closed and new external screen(s) detected: $INACTIVE_SCREENS"
             [ -n "$GHOST_SCREENS" ] && echo "[$SOURCE] Lid is closed and ghost screen(s) detected: $GHOST_SCREENS"
             
             xrandr --auto --output "$BUILTIN_SCREEN" --off
             $REINIT_SCRIPT
         fi
-    elif [ -n "$GHOST_SCREENS" ]; then
-        echo "[$SOURCE] Detected disconnected screen(s): $GHOST_SCREENS"
+    elif [ -n "$GHOST_SCREENS" ] || [ -n "$INACTIVE_SCREENS" ]; then
+        if [ -n "$GHOST_SCREENS" ]; then
+            echo "[$SOURCE] Detected disconnected screen(s): $GHOST_SCREENS"
+        else
+            echo "[$SOURCE] Detected inactive connected screen(s): $INACTIVE_SCREENS"
+        fi
         $SELECT_SCRIPT auto
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
