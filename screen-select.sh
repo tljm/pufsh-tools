@@ -145,7 +145,12 @@ elif [ -f "$SCRIPT_DIR/screen-reinit.sh" ]; then
 fi
 
 if [ -n "$REINIT_SCRIPT" ]; then
-    "$REINIT_SCRIPT"
+    # Only reinit if there's at least one active display
+    if xrandr | grep -q "[0-9]x[0-9]"; then
+        "$REINIT_SCRIPT"
+    else
+        echo "All displays are off. Skipping UI refresh."
+    fi
 else
     echo "Warning: screen-reinit.sh not found. UI refresh skipped."
 fi

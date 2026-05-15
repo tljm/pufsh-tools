@@ -194,7 +194,13 @@ reload_config() {
             [ -n "$GHOST_SCREENS" ] && echo "[$SOURCE] Lid is closed and ghost screen(s) detected: $GHOST_SCREENS"
             
             xrandr --auto --output "$BUILTIN_SCREEN" --off
-            $REINIT_SCRIPT
+            
+            # Only reinit if there's at least one active display left
+            if xrandr | grep -q "[0-9]x[0-9]"; then
+                $REINIT_SCRIPT
+            else
+                echo "[$SOURCE] All displays are off. Skipping UI reinitialization."
+            fi
         fi
     elif [ -n "$GHOST_SCREENS" ] || [ -n "$INACTIVE_SCREENS" ]; then
         if [ -n "$GHOST_SCREENS" ]; then
@@ -203,6 +209,7 @@ reload_config() {
             echo "[$SOURCE] Detected inactive connected screen(s): $INACTIVE_SCREENS"
         fi
         $SELECT_SCRIPT auto
+        # select.sh calls reinit.sh automatically, but it only happens if screens are on
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
         if [ "$SOURCE" = "SIGHUP" ]; then
