@@ -33,29 +33,42 @@
 
 # --- Data Gathering ---
 
-# Get all outputs and their status (connected/disconnected)
-ALL_OUTPUTS_INFO=$(xrandr | awk '/^(.*) (dis)?connected/ {print $1, $2}')
+# Get all outputs, their status (connected/disconnected), and if they have an active resolution (on/off)
+# Example xrandr output line: "eDP-1 connected primary 1920x1080+0+0 ..."
+ALL_OUTPUTS_INFO=$(xrandr | awk '/connected/ {
+    name=$1;
+    status=$2;
+    active="off";
+    for(i=3; i<=NF; i++) {
+        if($i ~ /^[0-9]+x[0-9]+\+[0-9]+\+[0-9]+$/) {
+            active="on";
+            break;
+        }
+    }
+    print name, status, active;
+}')
 CONNECTED_OUTPUTS=$(echo "$ALL_OUTPUTS_INFO" | awk '$2 == "connected" {print $1}')
 
 # --- Helper Functions ---
 
 show_help() {
     cat << EOF
-Usage: $(basename "$0") [auto | <display_name>]
+Usage: $(basename "$0") [auto | auto-external | <display_name>]
 
 Options:
   -h, --help    Show this help message and exit.
 
 Arguments:
   auto          Automatically configure all connected displays.
+  auto-external Automatically configure external displays and turn off built-in.
   display_name  Specify a single display to enable (all others will be turned off).
 
 Available displays:
 EOF
     if [ -n "$ALL_OUTPUTS_INFO" ]; then
-        echo "$ALL_OUTPUTS_INFO" | while read -r name status; do
+        echo "$ALL_OUTPUTS_INFO" | while read -r name status active; do
             if [ "$status" = "connected" ]; then
-                printf "  - %-12s (connected)\n" "$name"
+                printf "  - %-12s (connected, %s)\n" "$name" "$active"
             else
                 printf "  - %-12s (disconnected)\n" "$name"
             fi
@@ -77,6 +90,9 @@ fi
 
 # --- Execution ---
 
+# Detect built-in display (eDP, LVDS, DSI)
+BUILTIN_SCREEN=$(xrandr | grep -E "^(eDP|LVDS|DSI)" | awk '{print $1}' | head -n 1)
+
 # Cleanup other instances of screen scripts (but not the daemon)
 # This prevents race conditions if multiple selection commands are run rapidly.
 DAEMON_PID=$(pgrep -f screen-daemon.sh)
@@ -89,6 +105,13 @@ done
 if [ "$MODE" = "auto" ]; then
     echo "Auto-configuring displays..."
     xrandr --auto
+elif [ "$MODE" = "auto-external" ]; then
+    echo "Auto-configuring external displays..."
+    if [ -n "$BUILTIN_SCREEN" ]; then
+        xrandr --auto --output "$BUILTIN_SCREEN" --off
+    else
+        xrandr --auto
+    fi
 else
     # Verify if the requested display is valid and connected
     FOUND=0
