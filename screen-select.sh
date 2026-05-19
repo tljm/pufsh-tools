@@ -49,6 +49,9 @@ ALL_OUTPUTS_INFO=$(xrandr | awk '/connected/ {
 }')
 CONNECTED_OUTPUTS=$(echo "$ALL_OUTPUTS_INFO" | awk '$2 == "connected" {print $1}')
 
+# Detect built-in display (eDP, LVDS, DSI)
+BUILTIN_SCREEN=$(xrandr | grep -E "^(eDP|LVDS|DSI)" | awk '{print $1}' | head -n 1)
+
 # --- Configuration ---
 LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
 
@@ -75,10 +78,13 @@ Available displays:
 EOF
     if [ -n "$ALL_OUTPUTS_INFO" ]; then
         echo "$ALL_OUTPUTS_INFO" | while read -r name status active; do
+            INTERNAL_TAG=""
+            [ "$name" = "$BUILTIN_SCREEN" ] && INTERNAL_TAG=" (internal)"
+            
             if [ "$status" = "connected" ]; then
-                printf "  - %-12s (connected, %s)\n" "$name" "$active"
+                printf "  - %-12s (connected, %s)%s\n" "$name" "$active" "$INTERNAL_TAG"
             else
-                printf "  - %-12s (disconnected)\n" "$name"
+                printf "  - %-12s (disconnected)%s\n" "$name" "$INTERNAL_TAG"
             fi
         done
     else
@@ -97,9 +103,6 @@ if [ -z "$MODE" ] || [ "$MODE" = "-h" ] || [ "$MODE" = "--help" ]; then
 fi
 
 # --- Execution ---
-
-# Detect built-in display (eDP, LVDS, DSI)
-BUILTIN_SCREEN=$(xrandr | grep -E "^(eDP|LVDS|DSI)" | awk '{print $1}' | head -n 1)
 
 # Cleanup other instances of screen scripts (but not the daemon)
 # This prevents race conditions if multiple selection commands are run rapidly.
