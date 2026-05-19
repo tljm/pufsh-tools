@@ -44,8 +44,14 @@
 # --- Defaults ---
 GHOST_PERIOD=10
 INHIBIT_PERIOD=60
+LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
 
 # --- Helper Functions ---
+
+# Centralized logging with timestamps.
+log() {
+    echo "[$(date "$LOG_TS_FORMAT")] $*"
+}
 
 # Simple numeric check for argument validation.
 is_numeric() {
@@ -83,14 +89,14 @@ while getopts "hg:i:" opt; do
             if is_numeric "$OPTARG"; then
                 GHOST_PERIOD=$OPTARG
             else
-                echo "Error: -g requires a numeric argument." >&2; exit 1
+                log "Error: -g requires a numeric argument." >&2; exit 1
             fi
             ;;
         i) 
             if is_numeric "$OPTARG"; then
                 INHIBIT_PERIOD=$OPTARG
             else
-                echo "Error: -i requires a numeric argument." >&2; exit 1
+                log "Error: -i requires a numeric argument." >&2; exit 1
             fi
             ;;
         *) show_help; exit 1 ;;
@@ -141,12 +147,12 @@ for tool in xrandr sndioctl xprop xscreensaver-command; do
 done
 
 if [ -n "$MISSING" ]; then
-    echo "Error: Required tools not found in PATH:$MISSING" >&2
+    log "Error: Required tools not found in PATH:$MISSING" >&2
     exit 1
 fi
 
 if [ -z "$SELECT_SCRIPT" ] || [ -z "$REINIT_SCRIPT" ]; then
-    echo "Error: Required helper scripts (screen-select.sh or screen-reinit.sh) not found." >&2
+    log "Error: Required helper scripts (screen-select.sh or screen-reinit.sh) not found." >&2
     exit 1
 fi
 
@@ -155,7 +161,7 @@ fi
 # Logic for "smart" reload (triggered by SIGHUP or periodic timer)
 reload_config() {
     SOURCE=${1:-SIGHUP}
-    [ "$SOURCE" = "SIGHUP" ] && echo "[$SOURCE] Checking for screen events..."
+    [ "$SOURCE" = "SIGHUP" ] && log "[$SOURCE] Checking for screen events..."
     
     # 1. Check for Lid State if machdep.lidaction is 0
     LID_CLOSED=0
@@ -189,23 +195,23 @@ reload_config() {
         fi
         
         if [ "$BUILTIN_ACTIVE" -eq 1 ] || [ -n "$GHOST_SCREENS" ] || [ -n "$INACTIVE_SCREENS" ]; then
-            [ "$BUILTIN_ACTIVE" -eq 1 ] && echo "[$SOURCE] Lid is closed but built-in screen is still active."
-            [ -n "$INACTIVE_SCREENS" ] && echo "[$SOURCE] Lid is closed and new external screen(s) detected: $INACTIVE_SCREENS"
-            [ -n "$GHOST_SCREENS" ] && echo "[$SOURCE] Lid is closed and ghost screen(s) detected: $GHOST_SCREENS"
+            [ "$BUILTIN_ACTIVE" -eq 1 ] && log "[$SOURCE] Lid is closed but built-in screen is still active."
+            [ -n "$INACTIVE_SCREENS" ] && log "[$SOURCE] Lid is closed and new external screen(s) detected: $INACTIVE_SCREENS"
+            [ -n "$GHOST_SCREENS" ] && log "[$SOURCE] Lid is closed and ghost screen(s) detected: $GHOST_SCREENS"
             
             $SELECT_SCRIPT auto-external
         fi
     elif [ -n "$GHOST_SCREENS" ] || [ -n "$INACTIVE_SCREENS" ]; then
         if [ -n "$GHOST_SCREENS" ]; then
-            echo "[$SOURCE] Detected disconnected screen(s): $GHOST_SCREENS"
+            log "[$SOURCE] Detected disconnected screen(s): $GHOST_SCREENS"
         else
-            echo "[$SOURCE] Detected inactive connected screen(s): $INACTIVE_SCREENS"
+            log "[$SOURCE] Detected inactive connected screen(s): $INACTIVE_SCREENS"
         fi
         $SELECT_SCRIPT auto
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
         if [ "$SOURCE" = "SIGHUP" ]; then
-            echo "[$SOURCE] No screen events detected. System state looks clean."
+            log "[$SOURCE] No screen events detected. System state looks clean."
         fi
     fi
 }
@@ -221,7 +227,7 @@ inhibit_screensaver() {
         if [ -n "$ACTIVE_WIN" ] && [ "$ACTIVE_WIN" != "0x0" ]; then
             # 3. Check if that window is fullscreen
             if xprop -id "$ACTIVE_WIN" _NET_WM_STATE | grep -q "FULLSCREEN"; then
-                echo "[INHIBITOR] Audio + Fullscreen detected. Deactivating xscreensaver."
+                log "[INHIBITOR] Audio + Fullscreen detected. Deactivating xscreensaver."
                 xscreensaver-command -deactivate >/dev/null 2>&1
             fi
         fi
@@ -230,7 +236,7 @@ inhibit_screensaver() {
 
 # Logic for UI refresh (SIGUSR1)
 refresh_ui() {
-    echo "[SIGUSR1] Received. Refreshing UI components..."
+    log "[SIGUSR1] Received. Refreshing UI components..."
     $REINIT_SCRIPT
 }
 
@@ -245,7 +251,7 @@ trap 'refresh_ui' USR1
 TICK=$INHIBIT_PERIOD
 [ "$GHOST_PERIOD" -lt "$TICK" ] && TICK=$GHOST_PERIOD
 
-echo "Screen daemon started. PID: $$ (Tick: ${TICK}s, Inhibit: ${INHIBIT_PERIOD}s, Ghost: ${GHOST_PERIOD}s)"
+log "Screen daemon started. PID: $$ (Tick: ${TICK}s, Inhibit: ${INHIBIT_PERIOD}s, Ghost: ${GHOST_PERIOD}s)"
 
 INHIBIT_TIMER=0
 GHOST_TIMER=0

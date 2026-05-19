@@ -31,7 +31,15 @@
 #
 # ==============================================================================
 
+# --- Configuration ---
+LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
+
 # --- Helper Functions ---
+
+# Centralized logging with timestamps.
+log() {
+    echo "[$(date "$LOG_TS_FORMAT")] $*"
+}
 
 show_help() {
     cat << EOF
@@ -80,15 +88,15 @@ if [ ! -d "$HOOKS_DIR" ]; then
     exit 0
 fi
 
-echo "Refreshing UI components via hooks in $HOOKS_DIR..."
+log "Refreshing UI components via hooks in $HOOKS_DIR..."
 
 # Loop through all files in the hooks directory
 for hook in "$HOOKS_DIR"/*; do
     # Ensure it is a regular file and executable
     if [ -f "$hook" ] && [ -x "$hook" ]; then
-        echo "[Framework] Executing hook: $(basename "$hook")"
+        log "[Framework] Executing hook: $(basename "$hook")"
         "$hook"
     fi
 done
 
-echo "UI reinitialization complete."
+log "UI reinitialization complete."

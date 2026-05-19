@@ -49,7 +49,15 @@ ALL_OUTPUTS_INFO=$(xrandr | awk '/connected/ {
 }')
 CONNECTED_OUTPUTS=$(echo "$ALL_OUTPUTS_INFO" | awk '$2 == "connected" {print $1}')
 
+# --- Configuration ---
+LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
+
 # --- Helper Functions ---
+
+# Centralized logging with timestamps.
+log() {
+    echo "[$(date "$LOG_TS_FORMAT")] $*"
+}
 
 show_help() {
     cat << EOF
@@ -103,10 +111,10 @@ for pid in $(pgrep -f "screen-"); do
 done
 
 if [ "$MODE" = "auto" ]; then
-    echo "Auto-configuring displays..."
+    log "Auto-configuring displays..."
     xrandr --auto
 elif [ "$MODE" = "auto-external" ]; then
-    echo "Auto-configuring external displays..."
+    log "Auto-configuring external displays..."
     if [ -n "$BUILTIN_SCREEN" ]; then
         xrandr --auto --output "$BUILTIN_SCREEN" --off
     else
@@ -123,7 +131,7 @@ else
     done
 
     if [ "$FOUND" -eq 1 ]; then
-        echo "Switching to $MODE..."
+        log "Switching to $MODE..."
         
         # Build xrandr arguments safely using positional parameters
         # We do this in a subshell to avoid overwriting our own $1, $2, etc.
@@ -137,7 +145,7 @@ else
             xrandr "$@"
         )
     else
-        echo "Error: Display '$MODE' not found or not connected."
+        log "Error: Display '$MODE' not found or not connected." >&2
         echo ""
         show_help
         exit 1
@@ -172,8 +180,8 @@ if [ -n "$REINIT_SCRIPT" ]; then
     if xrandr | grep -q "[0-9]x[0-9]"; then
         "$REINIT_SCRIPT"
     else
-        echo "All displays are off. Skipping UI refresh."
+        log "All displays are off. Skipping UI refresh."
     fi
 else
-    echo "Warning: screen-reinit.sh not found. UI refresh skipped."
+    log "Warning: screen-reinit.sh not found. UI refresh skipped." >&2
 fi
