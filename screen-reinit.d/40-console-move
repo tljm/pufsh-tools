@@ -1,12 +1,25 @@
 #!/bin/sh
 # 40-console-move: Move xconsole to the bottom-right corner
 
+# Validate window ID is in hex format (0xNNNNNNNN)
+is_valid_window_id() {
+    case $1 in
+        0x[0-9a-fA-F]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Find the window ID of xconsole
 # xconsole usually has the WM_CLASS "xconsole.XConsole"
 WID=$(wmctrl -l -x | grep "XConsole" | awk '{print $1}' | head -n 1)
 
 if [ -z "$WID" ]; then
     exit 0
+fi
+
+if ! is_valid_window_id "$WID"; then
+    echo "Error: Invalid window ID format: $WID" >&2
+    exit 1
 fi
 
 # Get screen dimensions

@@ -275,8 +275,6 @@ while true; do
     # Use a background sleep and wait so signals can interrupt it.
     sleep "$TICK" &
     SLEEP_PID=$!
-    wait $SLEEP_PID
-    # If wait returns (either sleep finished or signal caught),
-    # ensure we don't leave orphaned sleep processes.
-    kill $SLEEP_PID 2>/dev/null
+    wait $SLEEP_PID 2>/dev/null
+    # No need to manually kill after wait completes successfully
 done

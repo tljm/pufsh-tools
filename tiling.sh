@@ -114,6 +114,10 @@ get_active_window_id() {
         echo "Error: No active window detected." >&2
         exit 1
     fi
+    if ! is_valid_window_id "$id"; then
+        echo "Error: Invalid window ID format: $id" >&2
+        exit 1
+    fi
     echo "$id"
 }
 
@@ -122,6 +126,14 @@ is_numeric() {
     case $1 in
         ''|*[!0-9]*) return 1 ;;
         *) return 0 ;;
+    esac
+}
+
+# Validate window ID is in hex format (0xNNNNNNNN)
+is_valid_window_id() {
+    case $1 in
+        0x[0-9a-fA-F]*) return 0 ;;
+        *) return 1 ;;
     esac
 }
 
@@ -312,13 +324,19 @@ echo "Initial Geometry: X=$CUR_X, Y=$CUR_Y, W=$CUR_W, H=$CUR_H"
 echo "Final Geometry:   X=$FINAL_X, Y=$FINAL_Y, W=$FINAL_W, H=$FINAL_H"
 
 # Apply the calculated geometry using wmctrl.
+if ! is_valid_window_id "$ID"; then
+    echo "Error: Invalid window ID format: $ID" >&2
+    exit 1
+fi
 wmctrl -i -r "$ID" -e "0,$FINAL_X,$FINAL_Y,$FINAL_W,$FINAL_H"
 
 # Optional focus tracking: Warp mouse to the center of the window.
 # Only runs if FOCUS_TRACK is enabled (default) AND xdotool is available.
 if [ "$FOCUS_TRACK" = "1" ]; then
     if command -v xdotool >/dev/null 2>&1; then
-        xdotool mousemove --window "$ID" $((FINAL_W / 2)) $((FINAL_H / 2))
+        if is_valid_window_id "$ID"; then
+            xdotool mousemove --window "$ID" $((FINAL_W / 2)) $((FINAL_H / 2))
+        fi
     else
         echo "Warning: xdotool not found. Focus tracking skipped (use -nf to silence this warning)." >&2
     fi

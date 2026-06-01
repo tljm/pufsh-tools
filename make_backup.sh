@@ -75,6 +75,23 @@ Environment:
 EOF
 }
 
+# Validate that a destination path is secure and writable
+validate_dest_path() {
+    dest=$1
+    
+    if [ -z "$dest" ]; then
+        echo "Error: Destination path is empty." >&2
+        return 1
+    fi
+    
+    if echo "$dest" | grep -q '\.\.'; then
+        echo "Error: Destination path contains directory traversal (..). Rejecting for security." >&2
+        return 1
+    fi
+    
+    return 0
+}
+
 # --- Argument Parsing ---
 
 DEST_DIR="${BACKUP_DIR:-$SCRIPT_DIR}"
@@ -88,7 +105,13 @@ SHOW_STATS=1
 while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help) show_help; exit 0 ;;
-        -d) DEST_DIR="$2"; shift 2 ;;
+        -d) 
+            if ! validate_dest_path "$2"; then
+                exit 1
+            fi
+            DEST_DIR="$2"
+            shift 2 
+            ;;
         -t) TYPE="$2"; shift 2 ;;
         -l) LEVEL="$2"; shift 2 ;;
         -p) PARALLEL=1; shift ;;

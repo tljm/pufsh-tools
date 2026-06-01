@@ -106,8 +106,9 @@ fi
 
 # Cleanup other instances of screen scripts (but not the daemon)
 # This prevents race conditions if multiple selection commands are run rapidly.
+# Use full command matching to avoid terminating unrelated processes.
 DAEMON_PID=$(pgrep -f screen-daemon.sh)
-for pid in $(pgrep -f "screen-"); do
+for pid in $(pgrep -f "screen-select.sh$|screen-reinit.sh$"); do
     if [ "$pid" != "$$" ] && [ "$pid" != "$DAEMON_PID" ]; then
         kill -9 "$pid" 2>/dev/null
     fi
