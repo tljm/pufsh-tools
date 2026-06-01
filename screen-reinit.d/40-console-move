@@ -13,14 +13,23 @@ fi
 SCREEN_W=$(xwininfo -root | grep 'Width:' | awk '{print $2}')
 SCREEN_H=$(xwininfo -root | grep 'Height:' | awk '{print $2}')
 
-# Get window dimensions
+# Get window dimensions (absolute positions include frame)
 WIN_INFO=$(xwininfo -id "$WID")
+WIN_X=$(echo "$WIN_INFO" | grep 'Absolute upper-left X:' | awk '{print $NF}')
+WIN_Y=$(echo "$WIN_INFO" | grep 'Absolute upper-left Y:' | awk '{print $NF}')
 WIN_W=$(echo "$WIN_INFO" | grep 'Width:' | awk '{print $NF}')
 WIN_H=$(echo "$WIN_INFO" | grep 'Height:' | awk '{print $NF}')
 
-# Calculate coordinates (bottom-right)
-FINAL_X=$((SCREEN_W - WIN_W))
-FINAL_Y=$((SCREEN_H - WIN_H))
+# Calculate frame offset (difference between absolute and relative positions)
+FRAME_X=$(echo "$WIN_INFO" | grep 'Relative upper-left X:' | awk '{print $NF}')
+FRAME_Y=$(echo "$WIN_INFO" | grep 'Relative upper-left Y:' | awk '{print $NF}')
+FRAME_L=$((WIN_X - FRAME_X))
+FRAME_T=$((WIN_Y - FRAME_Y))
+
+# Calculate coordinates (bottom-right with small margin)
+MARGIN=2
+FINAL_X=$((SCREEN_W - WIN_W - FRAME_L - MARGIN))
+FINAL_Y=$((SCREEN_H - WIN_H - FRAME_T - MARGIN))
 
 # Move the window
 # -e gravity,x,y,width,height (-1 means leave unchanged)

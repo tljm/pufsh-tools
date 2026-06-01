@@ -118,9 +118,29 @@ if [ "$MODE" = "auto" ]; then
     xrandr --auto
 elif [ "$MODE" = "auto-external" ]; then
     log "Auto-configuring external displays..."
-    if [ -n "$BUILTIN_SCREEN" ]; then
-        xrandr --auto --output "$BUILTIN_SCREEN" --off
+    # Find the first connected output that is NOT the built-in screen
+    PRIMARY_EXTERNAL=""
+    for out in $CONNECTED_OUTPUTS; do
+        if [ "$out" != "$BUILTIN_SCREEN" ]; then
+            PRIMARY_EXTERNAL="$out"
+            break
+        fi
+    done
+
+    if [ -n "$PRIMARY_EXTERNAL" ]; then
+        (
+            set -- --output "$PRIMARY_EXTERNAL" --primary --auto
+            for out in $CONNECTED_OUTPUTS; do
+                if [ "$out" = "$BUILTIN_SCREEN" ]; then
+                    set -- "$@" --output "$out" --off
+                elif [ "$out" != "$PRIMARY_EXTERNAL" ]; then
+                    set -- "$@" --output "$out" --auto
+                fi
+            done
+            xrandr "$@"
+        )
     else
+        log "Error: No external displays connected." >&2
         xrandr --auto
     fi
 else
