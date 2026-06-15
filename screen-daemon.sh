@@ -44,6 +44,7 @@
 # --- Defaults ---
 GHOST_PERIOD=10
 INHIBIT_PERIOD=60
+SUSPEND_MODE=0 # 0=off, 1=on
 LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
 
 # --- Helper Functions ---
@@ -61,6 +62,16 @@ is_numeric() {
     esac
 }
 
+handle_suspend_signal() {
+    log "[SIGUSR2] Entering suspend mode. Turning off all screens except built-in."
+    SUSPEND_MODE=1
+    if [ -n "$SELECT_SCRIPT" ] && [ -n "$BUILTIN_SCREEN" ]; then
+        "$SELECT_SCRIPT" builtin-only
+    else
+        log "Warning: Cannot enter suspend mode; screen-select.sh or built-in screen not found." >&2
+    fi
+}
+
 show_help() {
     cat << EOF
 Usage: $(basename "$0") [options]
@@ -73,8 +84,9 @@ Options:
   -i seconds    Interval for xscreensaver inhibition checks (default: $INHIBIT_PERIOD).
 
 Signals:
-  SIGHUP (1)    Trigger a manual 'ghost screen' check.
+  SIGHUP (1)    Trigger a manual 'ghost screen' check, or exit suspend mode.
   SIGUSR1 (30)  Trigger a UI component refresh via screen-reinit.sh.
+  SIGUSR2 (31)  Enter suspend mode (built-in screen only, other events ignored).
 
 Note: This script is typically started in the background from .xsession.
 EOF
@@ -156,11 +168,45 @@ if [ -z "$SELECT_SCRIPT" ] || [ -z "$REINIT_SCRIPT" ]; then
     exit 1
 fi
 
+# Initialize trackers to avoid overriding manual selection on startup
+PREV_CONNECTED=$(xrandr | awk '/ connected/ {print $1}' | sort | tr '\n' ' ')
+
+PREV_LID_CLOSED=0
+if [ -n "$LID_SENSOR" ] && [ "$(sysctl -n machdep.lidaction 2>/dev/null)" = "0" ]; then
+    LID_STATE=$(sysctl -n "$LID_SENSOR" 2>/dev/null)
+    case "$LID_STATE" in
+        Off*) PREV_LID_CLOSED=1 ;;
+    esac
+fi
+
 # --- Core Logic ---
 
 # Logic for "smart" reload (triggered by SIGHUP or periodic timer)
 reload_config() {
     SOURCE=${1:-SIGHUP}
+    
+    if [ "$SUSPEND_MODE" -eq 1 ]; then
+        log "[$SOURCE] Exiting suspend mode."
+        SUSPEND_MODE=0
+        # Re-evaluate screen state and reinit UI immediately after exiting suspend
+        if [ -n "$SELECT_SCRIPT" ]; then
+            "$SELECT_SCRIPT" auto
+        fi
+        if [ -n "$REINIT_SCRIPT" ]; then
+            "$REINIT_SCRIPT"
+        fi
+        PREV_CONNECTED=$(xrandr | awk '/ connected/ {print $1}' | sort | tr '\n' ' ')
+        PREV_LID_CLOSED=0
+        if [ -n "$LID_SENSOR" ] && [ "$(sysctl -n machdep.lidaction 2>/dev/null)" = "0" ]; then
+            LID_STATE=$(sysctl -n "$LID_SENSOR" 2>/dev/null)
+            case "$LID_STATE" in
+                Off*) PREV_LID_CLOSED=1 ;;
+            esac
+        fi
+        # Skip the rest of reload_config as we just did a full re-evaluation
+        return
+    fi
+
     [ "$SOURCE" = "SIGHUP" ] && log "[$SOURCE] Checking for screen events..."
     
     # 1. Check for Lid State if machdep.lidaction is 0
@@ -173,47 +219,58 @@ reload_config() {
         esac
     fi
 
-    # 2. Identify screen events
-    # Ghost Screens: disconnected but still have active geometry
-    GHOST_SCREENS=$(xrandr | awk '/ disconnected/ && /[0-9]+x[0-9]+/ {print $1}')
+    CUR_CONNECTED=$(xrandr | awk '/ connected/ {print $1}' | sort | tr '\n' ' ')
     
-    # Inactive Screens: connected but currently off (no resolution)
-    # If lid is closed, we ignore the builtin screen here (it's handled specifically)
-    # If lid is open, we include it so it can be auto-enabled
-    if [ "$LID_CLOSED" -eq 1 ]; then
-        INACTIVE_SCREENS=$(xrandr | awk -v builtin="$BUILTIN_SCREEN" \
-            '$1 != builtin && / connected/ && !/[0-9]+x[0-9]+/ {print $1}')
-    else
-        INACTIVE_SCREENS=$(xrandr | awk '/ connected/ && !/[0-9]+x[0-9]+/ {print $1}')
+    LID_CHANGED=0
+    if [ "$LID_CLOSED" -ne "$PREV_LID_CLOSED" ]; then
+        LID_CHANGED=1
+    fi
+    
+    CONN_CHANGED=0
+    if [ "$CUR_CONNECTED" != "$PREV_CONNECTED" ]; then
+        CONN_CHANGED=1
     fi
 
-    if [ "$LID_CLOSED" -eq 1 ] && [ -n "$BUILTIN_SCREEN" ]; then
-        # Check if built-in is active
-        BUILTIN_ACTIVE=0
-        if xrandr | grep "^$BUILTIN_SCREEN" | grep -q "[0-9]x[0-9]"; then
-            BUILTIN_ACTIVE=1
-        fi
-        
-        if [ "$BUILTIN_ACTIVE" -eq 1 ] || [ -n "$GHOST_SCREENS" ] || [ -n "$INACTIVE_SCREENS" ]; then
-            [ "$BUILTIN_ACTIVE" -eq 1 ] && log "[$SOURCE] Lid is closed but built-in screen is still active."
-            [ -n "$INACTIVE_SCREENS" ] && log "[$SOURCE] Lid is closed and new external screen(s) detected: $INACTIVE_SCREENS"
-            [ -n "$GHOST_SCREENS" ] && log "[$SOURCE] Lid is closed and ghost screen(s) detected: $GHOST_SCREENS"
-            
-            $SELECT_SCRIPT auto-external
-        fi
-    elif [ -n "$GHOST_SCREENS" ] || [ -n "$INACTIVE_SCREENS" ]; then
-        if [ -n "$GHOST_SCREENS" ]; then
-            log "[$SOURCE] Detected disconnected screen(s): $GHOST_SCREENS"
+    # Ghost Screens: disconnected but still have active geometry
+    GHOST_SCREENS=$(xrandr | awk '/ disconnected/ && /[0-9]+x[0-9]+/ {print $1}')
+
+    ACT=0
+    REASON=""
+    
+    if [ -n "$GHOST_SCREENS" ]; then
+        ACT=1
+        REASON="Detected disconnected screen(s) with active geometry: $GHOST_SCREENS"
+    elif [ "$LID_CLOSED" -eq 1 ] && [ -n "$BUILTIN_SCREEN" ] && xrandr | grep "^$BUILTIN_SCREEN" | grep -q "[0-9]x[0-9]"; then
+        ACT=1
+        REASON="Lid is closed but built-in screen is still active"
+    elif [ "$LID_CHANGED" -eq 1 ]; then
+        ACT=1
+        if [ "$LID_CLOSED" -eq 1 ]; then
+            REASON="Lid closed event detected"
         else
-            log "[$SOURCE] Detected inactive connected screen(s): $INACTIVE_SCREENS"
+            REASON="Lid opened event detected"
         fi
-        $SELECT_SCRIPT auto
+    elif [ "$CONN_CHANGED" -eq 1 ]; then
+        ACT=1
+        REASON="Screen connection change detected (connected: $CUR_CONNECTED)"
+    fi
+
+    if [ "$ACT" -eq 1 ]; then
+        log "[$SOURCE] $REASON"
+        if [ "$LID_CLOSED" -eq 1 ]; then
+            $SELECT_SCRIPT auto-external
+        else
+            $SELECT_SCRIPT auto
+        fi
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
         if [ "$SOURCE" = "SIGHUP" ]; then
             log "[$SOURCE] No screen events detected. System state looks clean."
         fi
     fi
+
+    PREV_CONNECTED=$CUR_CONNECTED
+    PREV_LID_CLOSED=$LID_CLOSED
 }
 
 # Logic for xscreensaver inhibition
@@ -244,6 +301,7 @@ refresh_ui() {
 
 trap 'reload_config SIGHUP' HUP
 trap 'refresh_ui' USR1
+trap 'handle_suspend_signal' USR2
 
 # --- Main Loop ---
 
@@ -257,6 +315,12 @@ INHIBIT_TIMER=0
 GHOST_TIMER=0
 
 while true; do
+    # If in suspend mode, skip all regular checks and just wait for SIGHUP to exit suspend.
+    if [ "$SUSPEND_MODE" -eq 1 ]; then
+        sleep 5 # Sleep for a bit to avoid busy-waiting
+        continue
+    fi
+
     # Run xscreensaver inhibitor
     INHIBIT_TIMER=$((INHIBIT_TIMER + TICK))
     if [ "$INHIBIT_TIMER" -ge "$INHIBIT_PERIOD" ]; then

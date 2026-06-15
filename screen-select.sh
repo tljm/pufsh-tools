@@ -48,6 +48,7 @@ ALL_OUTPUTS_INFO=$(xrandr | awk '/connected/ {
     print name, status, active;
 }')
 CONNECTED_OUTPUTS=$(echo "$ALL_OUTPUTS_INFO" | awk '$2 == "connected" {print $1}')
+DISCONNECTED_OUTPUTS=$(echo "$ALL_OUTPUTS_INFO" | awk '$2 == "disconnected" {print $1}')
 
 # Detect built-in display (eDP, LVDS, DSI)
 BUILTIN_SCREEN=$(xrandr | grep -E "^(eDP|LVDS|DSI)" | awk '{print $1}' | head -n 1)
@@ -62,6 +63,38 @@ log() {
     echo "[$(date "$LOG_TS_FORMAT")] $*"
 }
 
+# Helper function to get highest resolution mode argument for a display
+get_best_mode_arg() {
+    target=$1
+    res=$(xrandr | awk -v target="$target" '
+        /^[^ ]/ {
+            if ($1 == target) {
+                flag=1
+            } else {
+                flag=0
+            }
+            next
+        }
+        flag && /^[ ]+[0-9]+x[0-9]+/ {
+            split($1, parts, "x")
+            w = parts[1]
+            h = parts[2]
+            if (w * h > max_area) {
+                max_area = w * h
+                max_res = $1
+            }
+        }
+        END {
+            if (max_res != "") print max_res
+        }
+    ')
+    if [ -n "$res" ]; then
+        echo "--mode" "$res"
+    else
+        echo "--auto"
+    fi
+}
+
 show_help() {
     cat << EOF
 Usage: $(basename "$0") [auto | auto-external | <display_name>]
@@ -72,6 +105,7 @@ Options:
 Arguments:
   auto          Automatically configure all connected displays.
   auto-external Automatically configure external displays and turn off built-in.
+  builtin-only  Enable the built-in display and turn off all other displays.
   display_name  Specify a single display to enable (all others will be turned off).
 
 Available displays:
@@ -115,8 +149,20 @@ for pid in $(pgrep -f "screen-select.sh$|screen-reinit.sh$"); do
 done
 
 if [ "$MODE" = "auto" ]; then
-    log "Auto-configuring displays..."
-    xrandr --auto
+    log "Auto-configuring displays to highest available resolution..."
+    (
+        set --
+        for out in $CONNECTED_OUTPUTS; do
+            BEST_MODE=$(get_best_mode_arg "$out")
+            set -- "$@" --output "$out" $BEST_MODE
+        done
+        if [ "$#" -gt 0 ]; then
+            xrandr "$@"
+        else
+            log "No connected displays found to auto-configure." >&2
+        fi
+    )
+
 elif [ "$MODE" = "auto-external" ]; then
     log "Auto-configuring external displays..."
     # Find the first connected output that is NOT the built-in screen
@@ -130,12 +176,12 @@ elif [ "$MODE" = "auto-external" ]; then
 
     if [ -n "$PRIMARY_EXTERNAL" ]; then
         (
-            set -- --output "$PRIMARY_EXTERNAL" --primary --auto
+            set -- --output "$PRIMARY_EXTERNAL" --primary $(get_best_mode_arg "$PRIMARY_EXTERNAL")
             for out in $CONNECTED_OUTPUTS; do
                 if [ "$out" = "$BUILTIN_SCREEN" ]; then
                     set -- "$@" --output "$out" --off
                 elif [ "$out" != "$PRIMARY_EXTERNAL" ]; then
-                    set -- "$@" --output "$out" --auto
+                    set -- "$@" --output "$out" $(get_best_mode_arg "$out")
                 fi
             done
             xrandr "$@"
@@ -143,6 +189,22 @@ elif [ "$MODE" = "auto-external" ]; then
     else
         log "Error: No external displays connected." >&2
         xrandr --auto
+    fi
+elif [ "$MODE" = "builtin-only" ]; then
+    log "Switching to built-in screen only..."
+    if [ -n "$BUILTIN_SCREEN" ]; then
+        (
+            set -- --output "$BUILTIN_SCREEN" --primary $(get_best_mode_arg "$BUILTIN_SCREEN")
+            for out in $CONNECTED_OUTPUTS; do
+                if [ "$out" != "$BUILTIN_SCREEN" ]; then
+                    set -- "$@" --output "$out" --off
+                fi
+            done
+            xrandr "$@"
+        )
+    else
+        log "Error: Built-in screen not detected." >&2
+        exit 1
     fi
 else
     # Verify if the requested display is valid and connected
@@ -160,7 +222,7 @@ else
         # Build xrandr arguments safely using positional parameters
         # We do this in a subshell to avoid overwriting our own $1, $2, etc.
         (
-            set -- --output "$MODE" --primary --auto
+            set -- --output "$MODE" --primary $(get_best_mode_arg "$MODE")
             for out in $CONNECTED_OUTPUTS; do
                 if [ "$out" != "$MODE" ]; then
                     set -- "$@" --output "$out" --off
