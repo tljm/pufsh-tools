@@ -130,59 +130,19 @@ For example, you might use `/etc/apm/suspend` to disable external displays befor
 # Example: /etc/apm/suspend
 # This script will be executed by apmd when the system suspends.
 #!/bin/sh
-PATH="/usr/local/bin:/usr/X11R6/bin:$HOME/bin:$HOME/.local/bin:$PATH"
-export PATH
-
-# Log to a file if apmd's environment doesn't provide stdout/stderr easily accessible
-LOG_FILE="/var/log/apmd_suspend.log"
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [APMD Suspend Hook] $*" >> "$LOG_FILE"
-}
-
-log "Executing suspend hook: Disabling external screens."
-
-# Ensure screen-select.sh is in PATH or provide full path
-if command -v screen-select.sh >/dev/null 2>&1; then
-    screen-select.sh builtin-only >> "$LOG_FILE" 2>&1
-    log "screen-select.sh builtin-only executed."
-else
-    log "Error: screen-select.sh not found in PATH."
-fi
-
-# Additional commands can be added here, e.g., unmount external drives,
-# stop services that might cause issues, etc.
-
-log "Suspend hook finished."
-exit 0
+/usr/bin/pkill -USR2 -f screen-daemon.sh
+/bin/sleep 5
+/usr/bin/pkill -USR1 xidle
+/bin/sleep 1
 ```
 
 ```sh
 # Example: /etc/apm/resume
 # This script will be executed by apmd when the system resumes.
 #!/bin/sh
-PATH="/usr/local/bin:/usr/X11R6/bin:$HOME/bin:$HOME/.local/bin:$PATH"
-export PATH
-
-LOG_FILE="/var/log/apmd_resume.log"
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [APMD Resume Hook] $*" >> "$LOG_FILE"
-}
-
-log "Executing resume hook: Auto-configuring displays."
-
-# Ensure screen-select.sh is in PATH or provide full path
-if command -v screen-select.sh >/dev/null 2>&1; then
-    screen-select.sh auto >> "$LOG_FILE" 2>&1
-    log "screen-select.sh auto executed."
-else
-    log "Error: screen-select.sh not found in PATH."
-fi
-
-# Additional commands can be added here, e.g., remount external drives,
-# restart services, etc.
-
-log "Resume hook finished."
-exit 0
+/usr/bin/pkill -HUP -f screen-daemon.sh
+/bin/sleep 1
+/usr/bin/pkill -USR1 -f screen-daemon.sh
 ```
 
 ---
