@@ -127,15 +127,62 @@ On OpenBSD, `apmd` (Advanced Power Management daemon) can execute scripts in `/e
 For example, you might use `/etc/apm/suspend` to disable external displays before suspend and `/etc/apm/resume` to re-enable them (or call `screen-select.sh auto`) after resume, ensuring a smoother transition. Consult the `apmd(8)` and `apm(4)` man pages for more details on configuring these hooks.
 
 ```sh
-# Example /etc/apm/suspend hook snippet
+# Example: /etc/apm/suspend
+# This script will be executed by apmd when the system suspends.
 #!/bin/sh
-# Disable external displays before suspend
-/usr/local/bin/screen-select.sh builtin-only
+PATH="/usr/local/bin:/usr/X11R6/bin:$HOME/bin:$HOME/.local/bin:$PATH"
+export PATH
 
-# Example /etc/apm/resume hook snippet
+# Log to a file if apmd's environment doesn't provide stdout/stderr easily accessible
+LOG_FILE="/var/log/apmd_suspend.log"
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [APMD Suspend Hook] $*" >> "$LOG_FILE"
+}
+
+log "Executing suspend hook: Disabling external screens."
+
+# Ensure screen-select.sh is in PATH or provide full path
+if command -v screen-select.sh >/dev/null 2>&1; then
+    screen-select.sh builtin-only >> "$LOG_FILE" 2>&1
+    log "screen-select.sh builtin-only executed."
+else
+    log "Error: screen-select.sh not found in PATH."
+fi
+
+# Additional commands can be added here, e.g., unmount external drives,
+# stop services that might cause issues, etc.
+
+log "Suspend hook finished."
+exit 0
+```
+
+```sh
+# Example: /etc/apm/resume
+# This script will be executed by apmd when the system resumes.
 #!/bin/sh
-# Re-enable displays after resume
-/usr/local/bin/screen-select.sh auto
+PATH="/usr/local/bin:/usr/X11R6/bin:$HOME/bin:$HOME/.local/bin:$PATH"
+export PATH
+
+LOG_FILE="/var/log/apmd_resume.log"
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [APMD Resume Hook] $*" >> "$LOG_FILE"
+}
+
+log "Executing resume hook: Auto-configuring displays."
+
+# Ensure screen-select.sh is in PATH or provide full path
+if command -v screen-select.sh >/dev/null 2>&1; then
+    screen-select.sh auto >> "$LOG_FILE" 2>&1
+    log "screen-select.sh auto executed."
+else
+    log "Error: screen-select.sh not found in PATH."
+fi
+
+# Additional commands can be added here, e.g., remount external drives,
+# restart services, etc.
+
+log "Resume hook finished."
+exit 0
 ```
 
 ---
