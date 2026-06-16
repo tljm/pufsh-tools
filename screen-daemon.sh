@@ -276,6 +276,9 @@ reload_config() {
 # Logic for xscreensaver inhibition
 # Deactivates screensaver if audio is playing and active window is fullscreen.
 inhibit_screensaver() {
+    if [ "$SUSPEND_MODE" -eq 1 ]; then
+        return # Do not inhibit screensaver when in suspend mode
+    fi
     # 1. Check for audio via sndio
     if sndioctl | grep -q '^app/'; then
         # 2. Check for active window ID
@@ -315,11 +318,7 @@ INHIBIT_TIMER=0
 GHOST_TIMER=0
 
 while true; do
-    # If in suspend mode, skip all regular checks and just wait for SIGHUP to exit suspend.
-    if [ "$SUSPEND_MODE" -eq 1 ]; then
-        sleep 5 # Sleep for a bit to avoid busy-waiting
-        continue
-    fi
+
 
     # Run xscreensaver inhibitor
     INHIBIT_TIMER=$((INHIBIT_TIMER + TICK))
