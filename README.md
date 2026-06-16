@@ -2,6 +2,7 @@
 
 ![License](https://img.shields.io/github/license/tljm/pufsh-tools)
 ![Platform](https://img.shields.io/badge/platform-OpenBSD-blue)
+All tools run on OpenBSD.
 ![Language](https://img.shields.io/github/languages/top/tljm/pufsh-tools)
 ![GitHub last commit](https://img.shields.io/github/last-commit/tljm/pufsh-tools)
 ![AI Generated](https://img.shields.io/badge/AI%20Generated-99%25-blueviolet)
