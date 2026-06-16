@@ -2,7 +2,6 @@
 
 ![License](https://img.shields.io/github/license/tljm/pufsh-tools)
 ![Platform](https://img.shields.io/badge/platform-OpenBSD-blue)
-All tools run on OpenBSD.
 ![Language](https://img.shields.io/github/languages/top/tljm/pufsh-tools)
 ![GitHub last commit](https://img.shields.io/github/last-commit/tljm/pufsh-tools)
 ![AI Generated](https://img.shields.io/badge/AI%20Generated-99%25-blueviolet)
@@ -31,10 +30,11 @@ A set of scripts to handle monitor hotplugging, "ghost" screen cleanup, and UI r
 #### `screen-daemon.sh`
 A background daemon intended to be started from your `.xsession`. It monitors screen state, handles UI refresh signals, and manages power inhibition.
 - **Usage**: `screen-daemon.sh [-g ghost_seconds] [-i inhibit_seconds]`
+- **Suspend Mode**: When in suspend mode (triggered by `SIGUSR2`), only the built-in screen is kept active, and other checks are paused. `SIGHUP` exits suspend mode.
 - **Ghost Screen Cleanup**: Checks for outputs that are disconnected but still have active geometry. Default interval: 10 seconds (configurable with `-g`).
 - **xscreensaver Inhibition**: Checks if audio is playing (via `sndio`) and the active window is fullscreen; if so, it inhibits `xscreensaver` blanking. Default interval: 60 seconds (configurable with `-i`).
 - **Lid Management**: If `machdep.lidaction=0` and the lid is closed, it automatically disables the built-in screen and enables all other connected displays (periodic check every 10s).
-- **Signal Handling**: Responds to `SIGHUP` (manual ghost check) and `SIGUSR1` (UI refresh).
+- **Signal Handling**: Responds to `SIGHUP` (manual ghost check, exits suspend mode) and `SIGUSR1` (UI refresh). Use `SIGUSR2` (31) to enter suspend mode, which keeps only the built-in screen active and disables other checks.
 
 
 #### `screen-select.sh`
