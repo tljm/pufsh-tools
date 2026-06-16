@@ -127,9 +127,9 @@ On OpenBSD, `apmd` (Advanced Power Management daemon) can execute scripts in `/e
 For example, you might use `/etc/apm/suspend` to disable external displays before suspend and `/etc/apm/resume` to re-enable them (or call `screen-select.sh auto`) after resume, ensuring a smoother transition. Consult the `apmd(8)` and `apm(4)` man pages for more details on configuring these hooks.
 
 ```sh
+#!/bin/sh
 # Example: /etc/apm/suspend
 # This script will be executed by apmd when the system suspends.
-#!/bin/sh
 /usr/bin/pkill -USR2 -f screen-daemon.sh
 /bin/sleep 5
 /usr/bin/pkill -USR1 xidle
@@ -137,9 +137,9 @@ For example, you might use `/etc/apm/suspend` to disable external displays befor
 ```
 
 ```sh
+#!/bin/sh
 # Example: /etc/apm/resume
 # This script will be executed by apmd when the system resumes.
-#!/bin/sh
 /usr/bin/pkill -HUP -f screen-daemon.sh
 /bin/sleep 1
 /usr/bin/pkill -USR1 -f screen-daemon.sh
