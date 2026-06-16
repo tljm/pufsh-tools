@@ -121,6 +121,25 @@ export PATH="$PATH:$HOME/path/to/pufsh-tools"
 
 ## Configuration & Integration
 
+### APMD Hook Integration (`/etc/apm` hooks)
+On OpenBSD, `apmd` (Advanced Power Management daemon) can execute scripts in `/etc/apm` during suspend and resume events. For systems with external monitors, configuring these hooks can sometimes prevent system hangs or display issues when suspending or resuming with an external screen connected.
+
+For example, you might use `/etc/apm/suspend` to disable external displays before suspend and `/etc/apm/resume` to re-enable them (or call `screen-select.sh auto`) after resume, ensuring a smoother transition. Consult the `apmd(8)` and `apm(4)` man pages for more details on configuring these hooks.
+
+```sh
+# Example /etc/apm/suspend hook snippet
+#!/bin/sh
+# Disable external displays before suspend
+/usr/local/bin/screen-select.sh builtin-only
+
+# Example /etc/apm/resume hook snippet
+#!/bin/sh
+# Re-enable displays after resume
+/usr/local/bin/screen-select.sh auto
+```
+
+---
+
 ### .xsession Setup
 To use the display management suite, add the daemon to your `.xsession` file:
 ```sh
