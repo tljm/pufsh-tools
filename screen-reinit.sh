@@ -92,11 +92,13 @@ log "Refreshing UI components via hooks in $HOOKS_DIR..."
 
 # Loop through all executable files in the hooks directory, sorted numerically/alphabetically
 # As per AGENTS.md, non-zero exit from a hook should stop further processing.
-for hook in $(find "$HOOKS_DIR" -maxdepth 1 -type f -perm +u=x | sort); do
+for hook in $(find "$HOOKS_DIR" -maxdepth 1 -type f | sort); do
+    if [ -x "$hook" ]; then
     log "[Framework] Executing hook: $(basename "$hook")"
     if ! "$hook"; then
         log "[Framework] ERROR: Hook $(basename "$hook") failed with exit code $?. Aborting UI reinitialization." >&2
         exit 1 # Abort further processing as per documentation
+    fi
     fi
 done
 
