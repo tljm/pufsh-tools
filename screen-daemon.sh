@@ -258,9 +258,9 @@ reload_config() {
     if [ "$ACT" -eq 1 ]; then
         log "[$SOURCE] $REASON"
         if [ "$LID_CLOSED" -eq 1 ]; then
-            $SELECT_SCRIPT auto-external
+            "$SELECT_SCRIPT" auto-external
         else
-            $SELECT_SCRIPT auto
+            "$SELECT_SCRIPT" auto
         fi
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
@@ -287,7 +287,6 @@ inhibit_screensaver() {
         if [ -n "$ACTIVE_WIN" ] && [ "$ACTIVE_WIN" != "0x0" ]; then
             # 3. Check if that window is fullscreen
             if xprop -id "$ACTIVE_WIN" _NET_WM_STATE | grep -q "FULLSCREEN"; then
-                log "[INHIBITOR] Audio + Fullscreen detected. Deactivating xscreensaver."
                 xscreensaver-command -deactivate >/dev/null 2>&1
             fi
         fi
@@ -297,7 +296,7 @@ inhibit_screensaver() {
 # Logic for UI refresh (SIGUSR1)
 refresh_ui() {
     log "[SIGUSR1] Received. Refreshing UI components..."
-    $REINIT_SCRIPT
+    "$REINIT_SCRIPT"
 }
 
 # --- Signal Registration ---

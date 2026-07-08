@@ -2,15 +2,16 @@
 # 10-xphoon: Restart xphoon (Background/Wallpaper)
 
 # 1. Termination Phase
-# Loop until pgrep confirms the process is gone.
-while pgrep -x xphoon >/dev/null; do
-    pkill xphoon
-    sleep 1
-done
+# Capture PID for reliable termination.
+XPHOON_PID=$(pgrep -x xphoon)
+if [ -n "$XPHOON_PID" ]; then
+    kill -9 "$XPHOON_PID" 2>/dev/null
+fi
 
 # 2. Startup Phase
 # Launch the process in the background.
 xphoon -t 10 &
+XPHOON_PID=$!
 
 # Loop up to 5 times to verify it started.
 COUNT=0

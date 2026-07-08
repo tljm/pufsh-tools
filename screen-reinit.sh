@@ -92,7 +92,8 @@ log "Refreshing UI components via hooks in $HOOKS_DIR..."
 
 # Loop through all executable files in the hooks directory, sorted numerically/alphabetically
 # As per AGENTS.md, non-zero exit from a hook should stop further processing.
-for hook in $(find "$HOOKS_DIR" -maxdepth 1 -type f | sort); do
+# Use while IFS= read -r to safely handle filenames with spaces or special characters.
+find "$HOOKS_DIR" -maxdepth 1 -type f | sort | while IFS= read -r hook; do
     if [ -x "$hook" ]; then
     log "[Framework] Executing hook: $(basename "$hook")"
     if ! "$hook"; then

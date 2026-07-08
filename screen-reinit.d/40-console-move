@@ -18,7 +18,7 @@ if [ -z "$WID" ]; then
 fi
 
 if ! is_valid_window_id "$WID"; then
-    echo "Error: Invalid window ID format: $WID" >&2
+    echo "Error: Invalid window ID format." >&2
     exit 1
 fi
 

@@ -2,16 +2,17 @@
 # 20-xbattbar: Restart xbattbar (Battery Bar)
 
 # 1. Termination Phase
-# Loop until pgrep confirms the process is gone.
-while pgrep -x xbattbar >/dev/null; do
-    pkill xbattbar
-    sleep 1
-done
+# Capture PID for reliable termination.
+BATTPID=$(pgrep -x xbattbar)
+if [ -n "$BATTPID" ]; then
+    kill -9 "$BATTPID" 2>/dev/null
+fi
 
 # 2. Startup Phase
 # Launch the process in the background.
 # -a: always on top, -t: thickness, -T: show time in popup, -O: color
 xbattbar -a -t 2 -T -O yellow bottom 1>/dev/null 2>&1 &
+BATTPID=$!
 
 # Loop up to 5 times to verify it started.
 COUNT=0

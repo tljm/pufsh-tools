@@ -140,18 +140,22 @@ fi
 # Cleanup other instances of screen scripts (but not the daemon)
 # This prevents race conditions if multiple selection commands are run rapidly.
 # Use full command matching to avoid terminating unrelated processes.
+# Use a temp file to safely handle PIDs with spaces or special characters.
+SCREEN_PIDS_FILE=$(mktemp /tmp/screen_pids.XXXXXX)
+pgrep -f "screen-select.sh$|screen-reinit.sh$" > "$SCREEN_PIDS_FILE" 2>/dev/null
 DAEMON_PID=$(pgrep -f screen-daemon.sh)
-for pid in $(pgrep -f "screen-select.sh$|screen-reinit.sh$"); do
-    if [ "$pid" != "$$" ] && [ "$pid" != "$DAEMON_PID" ]; then
+while IFS= read -r pid; do
+    if [ -n "$pid" ] && [ "$pid" != "$$" ] && [ "$pid" != "$DAEMON_PID" ]; then
         kill -9 "$pid" 2>/dev/null
     fi
-done
+done < "$SCREEN_PIDS_FILE"
+rm -f "$SCREEN_PIDS_FILE"
 
 if [ "$MODE" = "auto" ]; then
     log "Auto-configuring all connected displays..."
     (
         set --
-        for out in $CONNECTED_OUTPUTS; do
+        for out in "$CONNECTED_OUTPUTS"; do
             set -- "$@" --output "$out" --auto
         done
         if [ "$#" -gt 0 ]; then
@@ -165,7 +169,7 @@ elif [ "$MODE" = "auto-external" ]; then
     log "Auto-configuring external displays..."
     # Find the first connected output that is NOT the built-in screen
     PRIMARY_EXTERNAL=""
-    for out in $CONNECTED_OUTPUTS; do
+    for out in "$CONNECTED_OUTPUTS"; do
         if [ "$out" != "$BUILTIN_SCREEN" ]; then
             PRIMARY_EXTERNAL="$out"
             break
@@ -175,7 +179,7 @@ elif [ "$MODE" = "auto-external" ]; then
     if [ -n "$PRIMARY_EXTERNAL" ]; then
         (
             set -- --output "$PRIMARY_EXTERNAL" --primary --auto
-            for out in $CONNECTED_OUTPUTS; do
+            for out in "$CONNECTED_OUTPUTS"; do
                 if [ "$out" = "$BUILTIN_SCREEN" ]; then
                     set -- "$@" --output "$out" --off
                 elif [ "$out" != "$PRIMARY_EXTERNAL" ]; then
@@ -197,7 +201,7 @@ elif [ "$MODE" = "builtin-only" ]; then
         if [ "$FB_W" -gt 0 ] && [ "$FB_H" -gt 0 ]; then
             (
                 set -- --output "$BUILTIN_SCREEN" --fb "${FB_W}x${FB_H}" --primary --auto
-                for out in $CONNECTED_OUTPUTS; do
+                for out in "$CONNECTED_OUTPUTS"; do
                     if [ "$out" != "$BUILTIN_SCREEN" ]; then
                         set -- "$@" --output "$out" --off
                     fi
@@ -219,7 +223,7 @@ else
         if [ "$FB_W" -gt 0 ] && [ "$FB_H" -gt 0 ]; then
             (
                 set -- --output "$MODE" --fb "${FB_W}x${FB_H}" --primary --auto
-                for out in $CONNECTED_OUTPUTS; do
+                for out in "$CONNECTED_OUTPUTS"; do
                     if [ "$out" != "$MODE" ]; then
                         set -- "$@" --output "$out" --off
                     fi
