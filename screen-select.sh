@@ -63,10 +63,10 @@ log() {
     echo "[$(date "$LOG_TS_FORMAT")] $*"
 }
 
-# Helper function to get highest resolution mode argument for a display
-get_best_mode_arg() {
+# Helper function to get current geometry from a connected display
+get_current_geometry() {
     target=$1
-    res=$(xrandr | awk -v target="$target" '
+    geo=$(xrandr | awk -v target="$target" '
         /^[^ ]/ {
             if ($1 == target) {
                 flag=1
@@ -75,23 +75,22 @@ get_best_mode_arg() {
             }
             next
         }
-        flag && /^[ ]+[0-9]+x[0-9]+/ {
+        flag && /^[ ]+([0-9]+x[0-9]+|[a-fA-F0-9]+x[a-fA-F0-9]+)/ {
             split($1, parts, "x")
             w = parts[1]
             h = parts[2]
-            if (w * h > max_area) {
-                max_area = w * h
-                max_res = $1
-            }
+            found=1
+            print w, h
+            exit
         }
         END {
-            if (max_res != "") print max_res
+            if (found != 1) print "0 0"
         }
     ')
-    if [ -n "$res" ]; then
-        echo "--mode" "$res"
+    if [ -n "$geo" ]; then
+        echo "$geo"
     else
-        echo "--auto"
+        echo "0 0"
     fi
 }
 
@@ -149,12 +148,11 @@ for pid in $(pgrep -f "screen-select.sh$|screen-reinit.sh$"); do
 done
 
 if [ "$MODE" = "auto" ]; then
-    log "Auto-configuring displays to highest available resolution..."
+    log "Auto-configuring all connected displays..."
     (
         set --
         for out in $CONNECTED_OUTPUTS; do
-            BEST_MODE=$(get_best_mode_arg "$out")
-            set -- "$@" --output "$out" $BEST_MODE
+            set -- "$@" --output "$out" --auto
         done
         if [ "$#" -gt 0 ]; then
             xrandr "$@"
@@ -176,12 +174,12 @@ elif [ "$MODE" = "auto-external" ]; then
 
     if [ -n "$PRIMARY_EXTERNAL" ]; then
         (
-            set -- --output "$PRIMARY_EXTERNAL" --primary $(get_best_mode_arg "$PRIMARY_EXTERNAL")
+            set -- --output "$PRIMARY_EXTERNAL" --primary --auto
             for out in $CONNECTED_OUTPUTS; do
                 if [ "$out" = "$BUILTIN_SCREEN" ]; then
                     set -- "$@" --output "$out" --off
                 elif [ "$out" != "$PRIMARY_EXTERNAL" ]; then
-                    set -- "$@" --output "$out" $(get_best_mode_arg "$out")
+                    set -- "$@" --output "$out" --auto
                 fi
             done
             xrandr "$@"
@@ -193,47 +191,44 @@ elif [ "$MODE" = "auto-external" ]; then
 elif [ "$MODE" = "builtin-only" ]; then
     log "Switching to built-in screen only..."
     if [ -n "$BUILTIN_SCREEN" ]; then
-        (
-            set -- --output "$BUILTIN_SCREEN" --primary $(get_best_mode_arg "$BUILTIN_SCREEN")
-            for out in $CONNECTED_OUTPUTS; do
-                if [ "$out" != "$BUILTIN_SCREEN" ]; then
-                    set -- "$@" --output "$out" --off
-                fi
-            done
-            xrandr "$@"
-        )
+        FB_GEOMETRY=$(get_current_geometry "$BUILTIN_SCREEN")
+        FB_W=$(echo "$FB_GEOMETRY" | awk '{print $1}')
+        FB_H=$(echo "$FB_GEOMETRY" | awk '{print $2}')
+        if [ "$FB_W" -gt 0 ] && [ "$FB_H" -gt 0 ]; then
+            (
+                set -- --output "$BUILTIN_SCREEN" --fb "${FB_W}x${FB_H}" --primary --auto
+                for out in $CONNECTED_OUTPUTS; do
+                    if [ "$out" != "$BUILTIN_SCREEN" ]; then
+                        set -- "$@" --output "$out" --off
+                    fi
+                done
+                xrandr "$@"
+            )
+        fi
     else
         log "Error: Built-in screen not detected." >&2
         exit 1
     fi
 else
-    # Verify if the requested display is valid and connected
-    FOUND=0
-    for out in $CONNECTED_OUTPUTS; do
-        if [ "$out" = "$MODE" ]; then
-            FOUND=1
-            break
+    # Single display name specified
+    log "Switching to display: $MODE"
+    if [ -n "$MODE" ]; then
+        FB_GEOMETRY=$(get_current_geometry "$MODE")
+        FB_W=$(echo "$FB_GEOMETRY" | awk '{print $1}')
+        FB_H=$(echo "$FB_GEOMETRY" | awk '{print $2}')
+        if [ "$FB_W" -gt 0 ] && [ "$FB_H" -gt 0 ]; then
+            (
+                set -- --output "$MODE" --fb "${FB_W}x${FB_H}" --primary --auto
+                for out in $CONNECTED_OUTPUTS; do
+                    if [ "$out" != "$MODE" ]; then
+                        set -- "$@" --output "$out" --off
+                    fi
+                done
+                xrandr "$@"
+            )
         fi
-    done
-
-    if [ "$FOUND" -eq 1 ]; then
-        log "Switching to $MODE..."
-        
-        # Build xrandr arguments safely using positional parameters
-        # We do this in a subshell to avoid overwriting our own $1, $2, etc.
-        (
-            set -- --output "$MODE" --primary $(get_best_mode_arg "$MODE")
-            for out in $CONNECTED_OUTPUTS; do
-                if [ "$out" != "$MODE" ]; then
-                    set -- "$@" --output "$out" --off
-                fi
-            done
-            xrandr "$@"
-        )
     else
-        log "Error: Display '$MODE' not found or not connected." >&2
-        echo ""
-        show_help
+        log "Error: No display specified." >&2
         exit 1
     fi
 fi
