@@ -46,12 +46,20 @@ GHOST_PERIOD=10
 INHIBIT_PERIOD=60
 SUSPEND_MODE=0 # 0=off, 1=on
 LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
-
-# --- Helper Functions ---
+: "${PUFSH_SCREEN_LOG:=${PUFSH_SCREEN_LOG:-}}"
 
 # Centralized logging with timestamps.
+# If PUFSH_SCREEN_LOG is set, messages are also appended to a file.
+# By default, all log output goes to stderr.
 log() {
-    echo "[$(date "$LOG_TS_FORMAT")] $*"
+    local prefix="$*"
+    echo "[$(date "$LOG_TS_FORMAT")] $prefix" >&2
+    if [ -n "$PUFSH_SCREEN_LOG" ]; then
+        local base="${0##*/}"
+        local log_file="$PUFSH_SCREEN_LOG/pufsh-${base%.*}.log"
+        mkdir -p "$(dirname "$log_file")" 2>/dev/null
+        printf "[$(date "$LOG_TS_FORMAT")] %s\n" "$prefix" >> "$log_file" 2>/dev/null
+    fi
 }
 
 # Simple numeric check for argument validation.
@@ -63,12 +71,12 @@ is_numeric() {
 }
 
 handle_suspend_signal() {
-    log "[SIGUSR2] Entering suspend mode. Turning off all screens except built-in."
+    log "[INFO] [SIGUSR2] Entering suspend mode. Turning off all screens except built-in." >&2
     SUSPEND_MODE=1
     if [ -n "$SELECT_SCRIPT" ] && [ -n "$BUILTIN_SCREEN" ]; then
         "$SELECT_SCRIPT" builtin-only
     else
-        log "Warning: Cannot enter suspend mode; screen-select.sh or built-in screen not found." >&2
+        log "[Warning] Cannot enter suspend mode; screen-select.sh or built-in screen not found." >&2
     fi
 }
 
@@ -101,14 +109,14 @@ while getopts "hg:i:" opt; do
             if is_numeric "$OPTARG"; then
                 GHOST_PERIOD=$OPTARG
             else
-                log "Error: -g requires a numeric argument." >&2; exit 1
+                log "[Error] -g requires a numeric argument." >&2; exit 1
             fi
             ;;
         i) 
             if is_numeric "$OPTARG"; then
                 INHIBIT_PERIOD=$OPTARG
             else
-                log "Error: -i requires a numeric argument." >&2; exit 1
+                log "[Error] -i requires a numeric argument." >&2; exit 1
             fi
             ;;
         *) show_help; exit 1 ;;
@@ -159,12 +167,12 @@ for tool in xrandr sndioctl xprop xscreensaver-command; do
 done
 
 if [ -n "$MISSING" ]; then
-    log "Error: Required tools not found in PATH:$MISSING" >&2
+    log "[Error] Required tools not found in PATH:$MISSING" >&2
     exit 1
 fi
 
 if [ -z "$SELECT_SCRIPT" ] || [ -z "$REINIT_SCRIPT" ]; then
-    log "Error: Required helper scripts (screen-select.sh or screen-reinit.sh) not found." >&2
+    log "[Error] Required helper scripts (screen-select.sh or screen-reinit.sh) not found." >&2
     exit 1
 fi
 
@@ -186,7 +194,7 @@ reload_config() {
     SOURCE=${1:-SIGHUP}
     
     if [ "$SUSPEND_MODE" -eq 1 ]; then
-        log "[$SOURCE] Exiting suspend mode."
+        log "[INFO] [$SOURCE] Exiting suspend mode." >&2
         SUSPEND_MODE=0
         # Re-evaluate screen state and reinit UI immediately after exiting suspend
         if [ -n "$SELECT_SCRIPT" ]; then
@@ -207,7 +215,7 @@ reload_config() {
         return
     fi
 
-    [ "$SOURCE" = "SIGHUP" ] && log "[$SOURCE] Checking for screen events..."
+    [ "$SOURCE" = "SIGHUP" ] && log "[INFO] [$SOURCE] Checking for screen events..." >&2
     
     # 1. Check for Lid State if machdep.lidaction is 0
     LID_CLOSED=0
@@ -256,7 +264,7 @@ reload_config() {
     fi
 
     if [ "$ACT" -eq 1 ]; then
-        log "[$SOURCE] $REASON"
+        log "[INFO] [$SOURCE] $REASON" >&2
         if [ "$LID_CLOSED" -eq 1 ]; then
             "$SELECT_SCRIPT" auto-external
         else
@@ -265,7 +273,7 @@ reload_config() {
     else
         # Only log periodic checks if a screen was actually cleaned up to keep logs quiet
         if [ "$SOURCE" = "SIGHUP" ]; then
-            log "[$SOURCE] No screen events detected. System state looks clean."
+            log "[INFO] [$SOURCE] No screen events detected. System state looks clean." >&2
         fi
     fi
 
@@ -295,7 +303,7 @@ inhibit_screensaver() {
 
 # Logic for UI refresh (SIGUSR1)
 refresh_ui() {
-    log "[SIGUSR1] Received. Refreshing UI components..."
+    log "[INFO] [SIGUSR1] Received. Refreshing UI components..." >&2
     "$REINIT_SCRIPT"
 }
 
@@ -311,7 +319,7 @@ trap 'handle_suspend_signal' USR2
 TICK=$INHIBIT_PERIOD
 [ "$GHOST_PERIOD" -lt "$TICK" ] && TICK=$GHOST_PERIOD
 
-log "Screen daemon started. PID: $$ (Tick: ${TICK}s, Inhibit: ${INHIBIT_PERIOD}s, Ghost: ${GHOST_PERIOD}s)"
+log "[INFO] Screen daemon started. PID: $$ (Tick: ${TICK}s, Inhibit: ${INHIBIT_PERIOD}s, Ghost: ${GHOST_PERIOD}s)" >&2
 
 INHIBIT_TIMER=0
 GHOST_TIMER=0

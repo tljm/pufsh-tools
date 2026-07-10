@@ -55,12 +55,20 @@ BUILTIN_SCREEN=$(xrandr | grep -E "^(eDP|LVDS|DSI)" | awk '{print $1}' | head -n
 
 # --- Configuration ---
 LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
-
-# --- Helper Functions ---
+: "${PUFSH_SCREEN_LOG:=${PUFSH_SCREEN_LOG:-}}"
 
 # Centralized logging with timestamps.
+# If PUFSH_SCREEN_LOG is set, messages are also appended to a file.
+# By default, all log output goes to stderr.
 log() {
-    echo "[$(date "$LOG_TS_FORMAT")] $*"
+    local prefix="$*"
+    echo "[$(date "$LOG_TS_FORMAT")] $prefix" >&2
+    if [ -n "$PUFSH_SCREEN_LOG" ]; then
+        local base="${0##*/}"
+        local log_file="$PUFSH_SCREEN_LOG/pufsh-${base%.*}.log"
+        mkdir -p "$(dirname "$log_file")" 2>/dev/null
+        printf "[$(date "$LOG_TS_FORMAT")] %s\n" "$prefix" >> "$log_file" 2>/dev/null
+    fi
 }
 
 # Helper function to get current geometry from a connected display
@@ -152,7 +160,7 @@ done < "$SCREEN_PIDS_FILE"
 rm -f "$SCREEN_PIDS_FILE"
 
 if [ "$MODE" = "auto" ]; then
-    log "Auto-configuring all connected displays..."
+    log "[INFO] Auto-configuring all connected displays..." >&2
     (
         set --
         for out in "$CONNECTED_OUTPUTS"; do
@@ -161,12 +169,12 @@ if [ "$MODE" = "auto" ]; then
         if [ "$#" -gt 0 ]; then
             xrandr "$@"
         else
-            log "No connected displays found to auto-configure." >&2
+            log "[Error] No connected displays found to auto-configure." >&2
         fi
     )
 
 elif [ "$MODE" = "auto-external" ]; then
-    log "Auto-configuring external displays..."
+    log "[INFO] Auto-configuring external displays..." >&2
     # Find the first connected output that is NOT the built-in screen
     PRIMARY_EXTERNAL=""
     for out in "$CONNECTED_OUTPUTS"; do
@@ -189,11 +197,11 @@ elif [ "$MODE" = "auto-external" ]; then
             xrandr "$@"
         )
     else
-        log "Error: No external displays connected." >&2
+        log "[Error] No external displays connected." >&2
         xrandr --auto
     fi
 elif [ "$MODE" = "builtin-only" ]; then
-    log "Switching to built-in screen only..."
+    log "[INFO] Switching to built-in screen only..." >&2
     if [ -n "$BUILTIN_SCREEN" ]; then
         FB_GEOMETRY=$(get_current_geometry "$BUILTIN_SCREEN")
         FB_W=$(echo "$FB_GEOMETRY" | awk '{print $1}')
@@ -210,12 +218,12 @@ elif [ "$MODE" = "builtin-only" ]; then
             )
         fi
     else
-        log "Error: Built-in screen not detected." >&2
+        log "[Error] Built-in screen not detected." >&2
         exit 1
     fi
 else
     # Single display name specified
-    log "Switching to display: $MODE"
+    log "[INFO] Switching to display: $MODE" >&2
     if [ -n "$MODE" ]; then
         FB_GEOMETRY=$(get_current_geometry "$MODE")
         FB_W=$(echo "$FB_GEOMETRY" | awk '{print $1}')
@@ -265,8 +273,8 @@ if [ -n "$REINIT_SCRIPT" ]; then
     if xrandr | grep -q "[0-9]x[0-9]"; then
         "$REINIT_SCRIPT"
     else
-        log "All displays are off. Skipping UI refresh."
+        log "[Info] All displays are off. Skipping UI refresh." >&2
     fi
 else
-    log "Warning: screen-reinit.sh not found. UI refresh skipped." >&2
+    log "[Warning] screen-reinit.sh not found. UI refresh skipped." >&2
 fi

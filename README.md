@@ -14,11 +14,41 @@ A collection of advanced productivity scripts and tools for OpenBSD, designed to
 
 A powerful, state-aware window tiling script that supports generalized grids, progressive expansion, and segment-based sliding. It is designed to work seamlessly with window managers like `cwm`.
 
+**Dependencies**: `wmctrl`, `xprop`, `xwininfo`, `jot`. Optionally: `xdotool` (for focus tracking).
+
+**Usage**:
+```sh
+# Static Tiling (Place window in specific segments)
+tiling.sh -h 3 1          # Left 1/3
+tiling.sh -h 3 1 2        # Left 2/3
+tiling.sh -h 6 2 5        # Middle 4/6
+tiling.sh -h 2 1 -v 2 1   # Top-left quarter
+
+# Progressive Tiling (Grow/Shrink toward edges)
+tiling.sh -h 3 -r         # Grow right edge; then move left edge
+tiling.sh -v 4 -b         # Grow bottom edge; then move top edge
+
+# Slide Tiling (Move by exactly one segment width/height)
+tiling.sh -h 3 -move-r    # Shift right by 1/3 of screen width
+tiling.sh -v 4 -move-t    # Shift up by 1/4 of screen height
+
+# Configuration Overrides
+tiling.sh -M 10 -h 2 1    # Use 10px margin
+tiling.sh -TOL 1 -h 3 -r  # Use 1px snap tolerance
+tiling.sh -nf -h 2 2      # Tile without focus tracking
+
+# Grid Sizes
+-h 4 ...                  # 4-column grid (1/4 segments)
+-h 6 ...                  # 6-column grid (1/6 segments)
+-v 4 ...                  # 4-row grid
+-v 6 ...                  # 6-row grid
+```
+
 **Features:**
-- **Static Tiling**: Place windows in specific grid segments (e.g., left 1/3, middle 4/6).
-- **Progressive Tiling**: "Snap and Grow" windows toward edges.
-- **Slide Tiling**: Move windows by exactly one segment width/height without resizing.
-- **Focus Tracking**: Warps mouse to maintain focus (Default: Enabled).
+- **Static Tiling**: Place windows in specific grid segments.
+- **Progressive Tiling**: "Snap and Grow" windows toward edges (`-r`, `-l`, `-b`, `-t`).
+- **Slide Tiling**: Move windows by exactly one segment width/height (`-move-r`, `-move-l`, `-move-t`, `-move-b`).
+- **Focus Tracking**: Warps mouse to maintain focus (Default: Enabled, disable with `-nf`).
 - **Smart Defaults**: 1px Margin (gap), 5px Snap Tolerance.
 
 ---
@@ -79,15 +109,7 @@ cd ~/projects/my-cool-project
 
 ## Installation
 
-### 1. Prerequisites
-Ensure the following tools are installed:
-- `wmctrl`, `xprop`, `xwininfo`, `xrandr`, `realpath`
-- `jot`, `du`, `awk`, `date` (standard on OpenBSD)
-- Archive tools for `make_backup.sh`: `7z`, `xz`, `bzip3`, `gzip`, `bzip2`
-- Optional: `xdotool` (for `tiling.sh` focus tracking), `pigz`, `pbzip2` (for parallel gzip/bzip2)
-
-### 2. Deployment Alternatives
-
+### 1. Deployment Alternatives
 Choose the method that best fits your workflow:
 
 #### Option A: Manual Copy
@@ -104,12 +126,6 @@ git clone https://github.com/tljm/pufsh-tools.git ~/.local/lib/pufsh-tools
 ln -s ~/.local/lib/pufsh-tools/*.sh ~/bin/
 ```
 
-**Tip for `make_backup.sh`:**
-You can also symlink this script specifically into your dedicated backup folder. It will respect the symlink location and save archives there:
-```sh
-ln -s ~/.local/lib/pufsh-tools/make_backup.sh ~/backups/
-```
-
 #### Option C: Add to PATH
 Clone the repository and add it directly to your shell's `PATH` in `~/.profile` or `~/.shrc`:
 ```sh
@@ -117,48 +133,24 @@ Clone the repository and add it directly to your shell's `PATH` in `~/.profile` 
 export PATH="$PATH:$HOME/path/to/pufsh-tools"
 ```
 
----
+### Note on POSIX
+All scripts are written in POSIX shell script (`sh`) and must be compiled/run on OpenBSD environments. Avoid bash-specific features like `[[`, `+=`, and `declare`.
 
 ## Configuration & Integration
 
-### APMD Hook Integration (`/etc/apm` hooks)
-On OpenBSD, `apmd` (Advanced Power Management daemon) can execute scripts in `/etc/apm` during suspend and resume events. For systems with external monitors, configuring these hooks can sometimes prevent system hangs or display issues when suspending or resuming with an external screen connected.
+### System Integration Hooks
 
-For example, you might use `/etc/apm/suspend` to disable external displays before suspend and `/etc/apm/resume` to re-enable them (or call `screen-select.sh auto`) after resume, ensuring a smoother transition. Consult the `apmd(8)` and `apm(4)` man pages for more details on configuring these hooks.
+On OpenBSD, system suspend/resume can be managed via `acpid` or `powerd`. These can trigger scripts to handle display state transitions when the system enters or exits sleep mode.
 
-```sh
-#!/bin/sh
-# Example: /etc/apm/suspend
-# This script will be executed by apmd when the system suspends.
-/usr/bin/pkill -USR2 -f screen-daemon.sh
-/bin/sleep 5
-/usr/bin/pkill -USR1 xidle
-/bin/sleep 1
-```
-
-```sh
-#!/bin/sh
-# Example: /etc/apm/resume
-# This script will be executed by apmd when the system resumes.
-/usr/bin/pkill -HUP -f screen-daemon.sh
-/bin/sleep 1
-/usr/bin/pkill -USR1 -f screen-daemon.sh
-```
+For systems with external monitors, configuring these hooks can prevent display issues when suspending or resuming with an external screen connected. Consult the `acpi(4)`, `powerd(8)`, and `acpid(8)` man pages for more details.
 
 ---
-
-### .xsession Setup
-To use the display management suite, add the daemon to your `.xsession` file:
-```sh
-# Start the screen management daemon
-screen-daemon.sh &
-
-# Initial display auto-config (optional)
-screen-select.sh auto
-
-exec cwm
-```
-
+### Contributing
+We welcome contributions! Please review the contribution guidelines (which can be added here later) and submit a pull request.
+1. Fork the repository.
+2. Make your changes.
+3. Run local tests (if they were added).
+4. Submit a PR.
 ### cwm Integration (`.cwmrc`)
 The `tiling.sh` script is designed to work seamlessly with `cwm`. Below are comprehensive suggested keybindings:
 
@@ -188,5 +180,5 @@ bind-key 4S-u     "tiling.sh -v 12 -move-b"
 bind-key 4S-i     "tiling.sh -v 12 -move-t"
 ```
 
-## License
+### License
 MIT License - Copyright (c) 2026 tljm

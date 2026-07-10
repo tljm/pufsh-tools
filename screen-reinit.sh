@@ -33,12 +33,20 @@
 
 # --- Configuration ---
 LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
-
-# --- Helper Functions ---
+: "${PUFSH_SCREEN_LOG:=${PUFSH_SCREEN_LOG:-}}"
 
 # Centralized logging with timestamps.
+# If PUFSH_SCREEN_LOG is set, messages are also appended to a file.
+# By default, all log output goes to stderr.
 log() {
-    echo "[$(date "$LOG_TS_FORMAT")] $*"
+    local prefix="$*"
+    echo "[$(date "$LOG_TS_FORMAT")] $prefix" >&2
+    if [ -n "$PUFSH_SCREEN_LOG" ]; then
+        local base="${0##*/}"
+        local log_file="$PUFSH_SCREEN_LOG/pufsh-${base%.*}.log"
+        mkdir -p "$(dirname "$log_file")" 2>/dev/null
+        printf "[$(date "$LOG_TS_FORMAT")] %s\n" "$prefix" >> "$log_file" 2>/dev/null
+    fi
 }
 
 show_help() {
@@ -88,19 +96,19 @@ if [ ! -d "$HOOKS_DIR" ]; then
     exit 0
 fi
 
-log "Refreshing UI components via hooks in $HOOKS_DIR..."
+log "[INFO] Refreshing UI components via hooks in $HOOKS_DIR..." >&2
 
 # Loop through all executable files in the hooks directory, sorted numerically/alphabetically
 # As per AGENTS.md, non-zero exit from a hook should stop further processing.
 # Use while IFS= read -r to safely handle filenames with spaces or special characters.
 find "$HOOKS_DIR" -maxdepth 1 -type f | sort | while IFS= read -r hook; do
     if [ -x "$hook" ]; then
-    log "[Framework] Executing hook: $(basename "$hook")"
+    log "[Info] [Framework] Executing hook: $(basename "$hook")" >&2
     if ! "$hook"; then
-        log "[Framework] ERROR: Hook $(basename "$hook") failed with exit code $?. Aborting UI reinitialization." >&2
+        log "[Error] [Framework] Hook $(basename "$hook") failed with exit code $?. Aborting UI reinitialization." >&2
         exit 1 # Abort further processing as per documentation
     fi
     fi
 done
 
-log "UI reinitialization complete."
+log "[INFO] UI reinitialization complete." >&2
