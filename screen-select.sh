@@ -33,6 +33,18 @@
 
 # --- Data Gathering ---
 
+# Check for required tools before proceeding
+MISSING=""
+for tool in xrandr awk; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        MISSING="$MISSING $tool"
+    fi
+done
+if [ -n "$MISSING" ]; then
+    log "Error: Required tools not found in PATH:$MISSING" >&2
+    exit 1
+fi
+
 # Get all outputs, their status (connected/disconnected), and if they have an active resolution (on/off)
 # Example xrandr output line: "eDP-1 connected primary 1920x1080+0+0 ..."
 ALL_OUTPUTS_INFO=$(xrandr | awk '/connected/ {
@@ -56,6 +68,9 @@ BUILTIN_SCREEN=$(xrandr | grep -E "^(eDP|LVDS|DSI)" | awk '{print $1}' | head -n
 # --- Configuration ---
 LOG_TS_FORMAT='+%Y-%m-%d %H:%M:%S'
 : "${PUFSH_SCREEN_LOG:=${PUFSH_SCREEN_LOG:-}}"
+
+# Dry-run mode: print commands without executing them
+DRY_RUN=0
 
 # Centralized logging with timestamps.
 # If PUFSH_SCREEN_LOG is set, messages are also appended to a file.
@@ -84,7 +99,9 @@ get_current_geometry() {
             next
         }
         flag && /^[ ]+([0-9]+x[0-9]+|[a-fA-F0-9]+x[a-fA-F0-9]+)/ {
-            split($1, parts, "x")
+            tmp = $1
+            sub(/^[ ]+/, "", tmp)
+            split(tmp, parts, "x")
             w = parts[1]
             h = parts[2]
             found=1
@@ -102,18 +119,51 @@ get_current_geometry() {
     fi
 }
 
+# Helper function to get the maximum available resolution for a display.
+# Scans all listed modes (not just the current one) and returns the
+# largest width / largest height combination.
+get_max_geometry() {
+    target=$1
+    geo=$(xrandr | awk -v target="$target" '
+        /^[^ ]/ {
+            if ($1 == target) { flag=1 } else { flag=0 }
+        }
+        flag && /^[ ]+[0-9]+x[0-9]+/ {
+            tmp = $1
+            sub(/^[ ]+/, "", tmp)
+            split(tmp, parts, "x")
+            w = parts[1]+0
+            h = parts[2]+0
+            if (w > best_w || (w == best_w && h > best_h)) {
+                best_w = w
+                best_h = h
+            }
+        }
+        END {
+            if (best_w > 0) print best_w, best_h
+            else print "0 0"
+        }
+    ')
+    if [ -n "$geo" ]; then
+        echo "$geo"
+    else
+        echo "0 0"
+    fi
+}
+
 show_help() {
     cat << EOF
-Usage: $(basename "$0") [auto | auto-external | <display_name>]
+Usage: $(basename "$0") [--dry-run] [auto | auto-external | builtin-only | <display_name>]
 
 Options:
-  -h, --help    Show this help message and exit.
+  -h, --help        Show this help message and exit.
+  --dry-run         Print the xrandr command without executing it.
 
 Arguments:
-  auto          Automatically configure all connected displays.
-  auto-external Automatically configure external displays and turn off built-in.
-  builtin-only  Enable the built-in display and turn off all other displays.
-  display_name  Specify a single display to enable (all others will be turned off).
+  auto              Automatically configure all connected displays.
+  auto-external     Automatically configure external displays and turn off built-in.
+  builtin-only      Enable the built-in display and turn off all other displays.
+  display_name      Specify a single display to enable (all others will be turned off).
 
 Available displays:
 EOF
@@ -143,6 +193,21 @@ if [ -z "$MODE" ] || [ "$MODE" = "-h" ] || [ "$MODE" = "--help" ]; then
     exit 0
 fi
 
+# --dry-run: print the xrandr command without executing it
+# Can be used alone (prints command for auto mode) or combined with a mode
+if [ "$MODE" = "--dry-run" ]; then
+    DRY_RUN=1
+    MODE="auto"
+fi
+
+# Check if first arg is --dry-run combined with a mode
+case "$MODE" in
+    --dry-run*)
+        DRY_RUN=1
+        MODE="${MODE#--dry-run }"
+        ;;
+esac
+
 # --- Execution ---
 
 # Cleanup other instances of screen scripts (but not the daemon)
@@ -161,32 +226,74 @@ rm -f "$SCREEN_PIDS_FILE"
 
 if [ "$MODE" = "auto" ]; then
     log "[INFO] Auto-configuring all connected displays..." >&2
+    if [ -n "$BUILTIN_SCREEN" ]; then
+        FB_GEOMETRY=$(get_max_geometry "$BUILTIN_SCREEN")
+        FB_W=$(echo "$FB_GEOMETRY" | awk '{print $1}')
+        FB_H=$(echo "$FB_GEOMETRY" | awk '{print $2}')
+    fi
     (
         set --
+        # Set internal screen as primary if it exists
+        if [ -n "$BUILTIN_SCREEN" ]; then
+            set -- --output "$BUILTIN_SCREEN" --fb "${FB_W}x${FB_H}" --primary --auto
+        fi
         for out in "$CONNECTED_OUTPUTS"; do
             set -- "$@" --output "$out" --auto
         done
         if [ "$#" -gt 0 ]; then
-            xrandr "$@"
+            if [ "$DRY_RUN" -eq 1 ]; then
+                echo "xrandr $@"
+            else
+                xrandr "$@"
+            fi
         else
             log "[Error] No connected displays found to auto-configure." >&2
         fi
     )
+    RC=$?
+    if [ "$RC" -ne 0 ]; then
+        log "[Error] xrandr auto-configuration failed (exit code $RC)." >&2
+    fi
 
 elif [ "$MODE" = "auto-external" ]; then
     log "[INFO] Auto-configuring external displays..." >&2
     # Find the first connected output that is NOT the built-in screen
+    # Pick the one with the highest resolution (prefers higher res over lower)
     PRIMARY_EXTERNAL=""
+    BEST_RES=""
     for out in "$CONNECTED_OUTPUTS"; do
-        if [ "$out" != "$BUILTIN_SCREEN" ]; then
-            PRIMARY_EXTERNAL="$out"
-            break
+        if [ "$out" = "$BUILTIN_SCREEN" ]; then
+            continue
+        fi
+        RES=$(xrandr | awk -v target="$out" '
+            /^[^ ]/ {
+                if ($1 == target) { flag=1; next }
+                flag=0
+            }
+            flag && /^[ ]+[0-9]+x[0-9]+/ {
+                sub(/^[ ]+/, "", $1)
+                split($1, parts, "x")
+                print parts[1] " " parts[2]
+                exit
+            }
+            END { print "0 0" }
+        ')
+        W=$(echo "$RES" | awk '{print $1}')
+        H=$(echo "$RES" | awk '{print $2}')
+        if [ "$W" -gt 0 ] && [ "$H" -gt 0 ]; then
+            # Compare resolutions: prefer higher width, then higher height
+            if [ -z "$BEST_RES" ] || [ "$W" -gt "$BEST_W" ] || { [ "$W" -eq "$BEST_W" ] && [ "$H" -gt "$BEST_H" ]; }; then
+                PRIMARY_EXTERNAL="$out"
+                BEST_RES="$RES"
+                BEST_W="$W"
+                BEST_H="$H"
+            fi
         fi
     done
 
     if [ -n "$PRIMARY_EXTERNAL" ]; then
         (
-            set -- --output "$PRIMARY_EXTERNAL" --primary --auto
+            set -- --output "$PRIMARY_EXTERNAL" --fb "${BEST_W}x${BEST_H}" --primary --auto
             for out in "$CONNECTED_OUTPUTS"; do
                 if [ "$out" = "$BUILTIN_SCREEN" ]; then
                     set -- "$@" --output "$out" --off
@@ -194,16 +301,30 @@ elif [ "$MODE" = "auto-external" ]; then
                     set -- "$@" --output "$out" --auto
                 fi
             done
-            xrandr "$@"
+            if [ "$DRY_RUN" -eq 1 ]; then
+                echo "xrandr $@"
+            else
+                xrandr "$@"
+            fi
         )
+        RC=$?
+        if [ "$RC" -ne 0 ]; then
+            log "[Error] xrandr auto-external configuration failed (exit code $RC)." >&2
+        fi
     else
         log "[Error] No external displays connected." >&2
-        xrandr --auto
+        (
+            if [ "$DRY_RUN" -eq 1 ]; then
+                echo "xrandr --auto"
+            else
+                xrandr --auto
+            fi
+        )
     fi
 elif [ "$MODE" = "builtin-only" ]; then
     log "[INFO] Switching to built-in screen only..." >&2
     if [ -n "$BUILTIN_SCREEN" ]; then
-        FB_GEOMETRY=$(get_current_geometry "$BUILTIN_SCREEN")
+        FB_GEOMETRY=$(get_max_geometry "$BUILTIN_SCREEN")
         FB_W=$(echo "$FB_GEOMETRY" | awk '{print $1}')
         FB_H=$(echo "$FB_GEOMETRY" | awk '{print $2}')
         if [ "$FB_W" -gt 0 ] && [ "$FB_H" -gt 0 ]; then
@@ -214,8 +335,16 @@ elif [ "$MODE" = "builtin-only" ]; then
                         set -- "$@" --output "$out" --off
                     fi
                 done
-                xrandr "$@"
+                if [ "$DRY_RUN" -eq 1 ]; then
+                    echo "xrandr $@"
+                else
+                    xrandr "$@"
+                fi
             )
+            RC=$?
+            if [ "$RC" -ne 0 ]; then
+                log "[Error] xrandr builtin-only configuration failed (exit code $RC)." >&2
+            fi
         fi
     else
         log "[Error] Built-in screen not detected." >&2
@@ -225,7 +354,7 @@ else
     # Single display name specified
     log "[INFO] Switching to display: $MODE" >&2
     if [ -n "$MODE" ]; then
-        FB_GEOMETRY=$(get_current_geometry "$MODE")
+        FB_GEOMETRY=$(get_max_geometry "$MODE")
         FB_W=$(echo "$FB_GEOMETRY" | awk '{print $1}')
         FB_H=$(echo "$FB_GEOMETRY" | awk '{print $2}')
         if [ "$FB_W" -gt 0 ] && [ "$FB_H" -gt 0 ]; then
@@ -236,12 +365,24 @@ else
                         set -- "$@" --output "$out" --off
                     fi
                 done
-                xrandr "$@"
+                if [ "$DRY_RUN" -eq 1 ]; then
+                    echo "xrandr $@"
+                else
+                    xrandr "$@"
+                fi
             )
+            RC=$?
+            if [ "$RC" -ne 0 ]; then
+                log "[Error] xrandr single-display configuration failed (exit code $RC)." >&2
+            fi
         fi
     else
-        log "Error: No display specified." >&2
-        exit 1
+        if [ "$DRY_RUN" -eq 1 ]; then
+            log "[Info] No display specified. (dry-run)" >&2
+        else
+            log "Error: No display specified." >&2
+            exit 1
+        fi
     fi
 fi
 
@@ -261,20 +402,23 @@ SELF_PATH=$(command -v "$0" 2>/dev/null)
 SCRIPT_DIR=$(dirname "$(realpath "$SELF_PATH" 2>/dev/null || echo "$SELF_PATH")")
 
 # Reinitialize UI components (wallpaper, bars, etc.)
-REINIT_SCRIPT=""
-if command -v screen-reinit.sh >/dev/null 2>&1; then
-    REINIT_SCRIPT=$(command -v screen-reinit.sh)
-elif [ -f "$SCRIPT_DIR/screen-reinit.sh" ]; then
-    REINIT_SCRIPT="$SCRIPT_DIR/screen-reinit.sh"
-fi
-
-if [ -n "$REINIT_SCRIPT" ]; then
-    # Only reinit if there's at least one active display
-    if xrandr | grep -q "[0-9]x[0-9]"; then
-        "$REINIT_SCRIPT"
-    else
-        log "[Info] All displays are off. Skipping UI refresh." >&2
+# Skip reinit in dry-run mode
+if [ "$DRY_RUN" -eq 0 ]; then
+    REINIT_SCRIPT=""
+    if command -v screen-reinit.sh >/dev/null 2>&1; then
+        REINIT_SCRIPT=$(command -v screen-reinit.sh)
+    elif [ -f "$SCRIPT_DIR/screen-reinit.sh" ]; then
+        REINIT_SCRIPT="$SCRIPT_DIR/screen-reinit.sh"
     fi
-else
-    log "[Warning] screen-reinit.sh not found. UI refresh skipped." >&2
+
+    if [ -n "$REINIT_SCRIPT" ]; then
+        # Only reinit if there's at least one active display
+        if xrandr | grep -q "[0-9]x[0-9]"; then
+            "$REINIT_SCRIPT"
+        else
+            log "[Info] All displays are off. Skipping UI refresh." >&2
+        fi
+    else
+        log "[Warning] screen-reinit.sh not found. UI refresh skipped." >&2
+    fi
 fi
