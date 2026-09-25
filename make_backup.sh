@@ -351,6 +351,6 @@ if [ $RET -eq 0 ]; then
         echo "Time Taken:     $DUR_HUMAN"
     fi
 else
-    echo "Error: Backup failed." >&2
+    echo "Error: Backup failed!!!" >&2
     exit 1
 fi
